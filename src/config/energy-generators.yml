@@ -1,0 +1,9 @@
+giravolt:
+  active: true
+  name: Giravolt
+  mqtt_topic: Dades-Fotovoltaiques-consum-giravolt32
+
+residencia:
+  active: true
+  name: Residència
+  mqtt_topic: Generacio-Residencia

@@ -1,0 +1,19 @@
+# Ignorar tu carpeta
+energina-torello/
+
+# Carpetas de dependencias
+node_modules/
+vendor/
+
+# Carpetas de build o compilación
+dist/
+build/
+.out/
+
+# Archivos de logs y temporales
+*.log
+*.tmp
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
