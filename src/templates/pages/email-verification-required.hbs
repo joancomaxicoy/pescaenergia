@@ -1,0 +1,96 @@
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <img src="/images/pescaenergia-logo.png" alt="PescaEnergia" class="auth-logo">
+            <h1 class="auth-title">Verificació requerida</h1>
+            <p class="auth-subtitle">Has de verificar el teu correu electrònic per continuar</p>
+        </div>
+
+        <div class="alert alert-warning">
+            <strong>Compte no verificat</strong><br>
+            Hem enviat un correu de verificació a <strong>{{user.email}}</strong>. 
+            Si us plau, revisa la teva safata d'entrada i fes clic a l'enllaç de verificació.
+        </div>
+
+        <div class="empty-state">
+            <div class="empty-state-icon">📧</div>
+            <h2 class="empty-state-title">Revisa el teu correu</h2>
+            <p class="empty-state-description">
+                Si no has rebut el correu, revisa la carpeta de spam o sol·licita un nou enllaç de verificació.
+            </p>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="btn btn-primary btn-block" id="resendBtn">
+                <span class="btn-text">Reenviar correu de verificació</span>
+                <span class="loading" id="resendLoading" style="display: none;"></span>
+            </button>
+            
+            <div style="margin-top: 20px;">
+                <a href="/area-usuari/login" class="auth-link">Tornar al login</a>
+            </div>
+        </div>
+
+        <!-- Alert container for messages -->
+        <div id="alert-container" style="margin-top: 20px;"></div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const resendBtn = document.getElementById('resendBtn');
+    
+    if (resendBtn) {
+        resendBtn.addEventListener('click', async function() {
+            const resendLoading = document.getElementById('resendLoading');
+            const btnText = resendBtn.querySelector('.btn-text');
+            const alertContainer = document.getElementById('alert-container');
+
+            // Show loading
+            resendBtn.disabled = true;
+            btnText.style.display = 'none';
+            resendLoading.style.display = 'inline-block';
+
+            try {
+                const response = await fetch('/api/auth/resend-verification', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        email: '{{user.email}}' 
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            Correu de verificació enviat correctament. Revisa la teva safata d'entrada.
+                        </div>
+                    `;
+                } else {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-error">
+                            ${data.error || 'Error enviant el correu de verificació'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alertContainer.innerHTML = `
+                    <div class="alert alert-error">
+                        Error de connexió. Torna-ho a intentar.
+                    </div>
+                `;
+            } finally {
+                // Hide loading
+                resendBtn.disabled = false;
+                btnText.style.display = 'inline';
+                resendLoading.style.display = 'none';
+            }
+        });
+    }
+});
+</script>

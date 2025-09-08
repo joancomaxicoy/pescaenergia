@@ -8,8 +8,15 @@ class Database {
 
   async connect() {
     try {
+      // Parsear la URL de la base de datos desde .env
+      const dbUrl = new URL(process.env.DATABASE_URL);
+      
       this.pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
+        host: dbUrl.hostname,
+        port: parseInt(dbUrl.port) || 5432,
+        database: dbUrl.pathname.slice(1), // Remover el '/' inicial
+        user: dbUrl.username,
+        password: decodeURIComponent(dbUrl.password), // Decodificar caracteres especiales como %24 -> $
         max: 20,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 2000,

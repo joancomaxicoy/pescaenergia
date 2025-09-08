@@ -1,0 +1,161 @@
+<div class="cups-container">
+    <div class="cups-card">
+        <div class="cups-icon">⚡</div>
+        <h1 class="cups-title">Assigna el teu CUPS</h1>
+        <p class="cups-description">
+            Per poder accedir al teu dashboard energètic, necessitem que assignis el teu CUPS 
+            (Codi Universal del Punt de Subministrament). Aquest codi identifica de manera única 
+            el teu punt de connexió a la xarxa elèctrica.
+        </p>
+
+        <!-- Alert container -->
+        <div id="alert-container"></div>
+
+        <form id="cupsForm" class="cups-form">
+            <div class="form-group">
+                <label for="cups" class="form-label">CUPS</label>
+                <input 
+                    type="text" 
+                    id="cups" 
+                    class="form-input cups-input" 
+                    placeholder="ES0031446450479001ZC0F"
+                    required
+                    maxlength="22"
+                >
+                <div class="form-error" id="cupsError"></div>
+                <div class="form-success" id="cupsSuccess"></div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block" id="assignBtn">
+                <span class="btn-text">Assignar CUPS</span>
+                <span class="loading" id="assignLoading" style="display: none;"></span>
+            </button>
+        </form>
+
+        <div class="alert alert-info" style="margin-top: 30px;">
+            <strong>On trobar el meu CUPS?</strong><br>
+            El CUPS apareix a la teva factura elèctrica, normalment a la part superior. 
+            És un codi de 20-22 caràcters que comença per "ES".
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('cupsForm');
+    const cupsInput = document.getElementById('cups');
+    const assignBtn = document.getElementById('assignBtn');
+    const assignLoading = document.getElementById('assignLoading');
+    const btnText = assignBtn.querySelector('.btn-text');
+
+    // Format CUPS input as user types
+    cupsInput.addEventListener('input', function(e) {
+        let value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        e.target.value = value;
+        
+        // Clear previous errors
+        clearFieldError('cups');
+        
+        // Basic validation
+        if (value.length > 0 && !value.startsWith('ES')) {
+            showFieldError('cups', 'El CUPS ha de començar per "ES"');
+        } else if (value.length > 22) {
+            showFieldError('cups', 'El CUPS no pot tenir més de 22 caràcters');
+        }
+    });
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const cups = cupsInput.value.trim();
+        
+        // Validation
+        if (!cups) {
+            showFieldError('cups', 'El CUPS és obligatori');
+            return;
+        }
+        
+        if (!cups.startsWith('ES')) {
+            showFieldError('cups', 'El CUPS ha de començar per "ES"');
+            return;
+        }
+        
+        if (cups.length < 20 || cups.length > 22) {
+            showFieldError('cups', 'El CUPS ha de tenir entre 20 i 22 caràcters');
+            return;
+        }
+
+        // Show loading
+        assignBtn.disabled = true;
+        btnText.style.display = 'none';
+        assignLoading.style.display = 'inline-block';
+
+        try {
+            const response = await fetch('/api/cups/assign', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${getAuthToken()}`
+                },
+                body: JSON.stringify({ cups })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showAlert('success', 'CUPS assignat correctament! Redirigint al dashboard...');
+                setTimeout(() => {
+                    window.location.href = '/area-usuari';
+                }, 2000);
+            } else {
+                showAlert('error', data.error || 'Error assignant el CUPS');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showAlert('error', 'Error de connexió. Torna-ho a intentar.');
+        } finally {
+            // Hide loading
+            assignBtn.disabled = false;
+            btnText.style.display = 'inline';
+            assignLoading.style.display = 'none';
+        }
+    });
+});
+
+function showFieldError(field, message) {
+    const errorEl = document.getElementById(field + 'Error');
+    const inputEl = document.getElementById(field);
+    
+    errorEl.textContent = message;
+    inputEl.classList.add('error');
+}
+
+function clearFieldError(field) {
+    const errorEl = document.getElementById(field + 'Error');
+    const inputEl = document.getElementById(field);
+    
+    errorEl.textContent = '';
+    inputEl.classList.remove('error');
+}
+
+function showAlert(type, message) {
+    const alertContainer = document.getElementById('alert-container');
+    alertContainer.innerHTML = `
+        <div class="alert alert-${type}">
+            ${message}
+        </div>
+    `;
+}
+
+function getAuthToken() {
+    // Get token from cookie or localStorage
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'authToken') {
+            return value;
+        }
+    }
+    return localStorage.getItem('authToken');
+}
+</script>

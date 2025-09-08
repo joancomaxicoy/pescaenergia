@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}} - PescaEnergia</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+    {{#if showNavbar}}
+        {{> navbar}}
+    {{/if}}
+    
+    <main class="main-content">
+        {{{body}}}
+    </main>
+
+    {{#if showFooter}}
+        <footer class="footer">
+            <div class="container">
+                <p>&copy; 2025 PescaEnergia. Tots els drets reservats.</p>
+            </div>
+        </footer>
+    {{/if}}
+
+    <script src="/js/auth.js"></script>
+    {{#if additionalScripts}}
+        {{#each additionalScripts}}
+            <script src="{{this}}"></script>
+        {{/each}}
+    {{/if}}
+</body>
+</html>

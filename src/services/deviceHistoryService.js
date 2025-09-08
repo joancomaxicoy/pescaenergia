@@ -385,7 +385,7 @@ class DeviceHistoryService {
             u.cups as user_cups,
             u.name as user_name
           FROM devices d
-          JOIN users u ON d.user_id = u.id
+          JOIN users u ON d.user_id::uuid = u.id
           WHERE d.id = $1::uuid
           LIMIT 1
         `;
@@ -412,7 +412,7 @@ class DeviceHistoryService {
         if (config[generatorKey] && config[generatorKey].active) {
           // Crear objeto virtual del generador
           const deviceInfo = {
-            id: deviceId, // Usar el deviceId original como ID
+            id: `gen-${generatorKey}`, // Agregar prefijo gen- para coincidir con la BD
             device_name: config[generatorKey].name,
             device_type: 'GENERATOR',
             shelly_device_id: deviceId,

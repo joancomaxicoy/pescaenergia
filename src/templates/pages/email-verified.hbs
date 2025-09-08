@@ -1,0 +1,53 @@
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <img src="/images/pescaenergia-logo.png" alt="PescaEnergia" class="auth-logo">
+            {{#if success}}
+                <h1 class="auth-title">Email verificat!</h1>
+                <p class="auth-subtitle">El teu compte ha estat activat correctament</p>
+            {{else}}
+                <h1 class="auth-title">Error de verificació</h1>
+                <p class="auth-subtitle">No s'ha pogut verificar el teu email</p>
+            {{/if}}
+        </div>
+
+        {{#if success}}
+            <div class="alert alert-success">
+                {{message}}
+            </div>
+
+            <div class="empty-state">
+                <div class="empty-state-icon">✅</div>
+                <h2 class="empty-state-title">Verificació completada</h2>
+                <p class="empty-state-description">
+                    Ja pots accedir al teu compte i començar a gestionar la teva energia.
+                </p>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="/area-usuari/login" class="btn btn-primary btn-block">
+                    Iniciar sessió
+                </a>
+            </div>
+        {{else}}
+            <div class="alert alert-error">
+                {{message}}
+            </div>
+
+            <div class="empty-state">
+                <div class="empty-state-icon">❌</div>
+                <h2 class="empty-state-title">Verificació fallida</h2>
+                <p class="empty-state-description">
+                    L'enllaç de verificació pot haver expirat o ser invàlid. 
+                    Pots sol·licitar un nou enllaç des de la pàgina de login.
+                </p>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="/area-usuari/login" class="btn btn-primary btn-block">
+                    Anar al login
+                </a>
+            </div>
+        {{/if}}
+    </div>
+</div>

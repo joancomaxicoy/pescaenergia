@@ -1,9 +1,8 @@
 const express = require('express');
 const { body, param, query, validationResult } = require('express-validator');
+const configLoader = require('../utils/configLoader');
 const DeviceHistoryService = require('../services/deviceHistoryService');
 const logger = require('../utils/logger');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
-const { optionalAuthWithDeviceAccess, logDeviceAccess } = require('../middleware/deviceAuth');
 
 const router = express.Router();
 const deviceHistoryService = new DeviceHistoryService();
@@ -26,33 +25,173 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+// Middleware para validar que el generador existe
+const validateGenerator = asyncHandler(async (req, res, next) => {
+  const { generatorCode } = req.params;
+  
+  try {
+    const generatorsConfig = configLoader.loadEnergyGenerators();
+    
+    if (!generatorsConfig[generatorCode] || !generatorsConfig[generatorCode].active) {
+      return res.status(404).json({
+        error: 'Generador no encontrado',
+        generatorCode,
+        availableGenerators: Object.keys(generatorsConfig).filter(code => generatorsConfig[code].active),
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Agregar información del generador al request para uso posterior
+    req.generatorInfo = {
+      code: generatorCode,
+      name: generatorsConfig[generatorCode].name,
+      mqtt_topic: generatorsConfig[generatorCode].mqtt_topic
+    };
+    
+    next();
+  } catch (error) {
+    logger.error('Error validando generador:', {
+      generatorCode,
+      error: error.message
+    });
+    
+    res.status(500).json({
+      error: 'Error validando generador',
+      details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 /**
  * @swagger
  * tags:
- *   name: Device History
- *   description: Endpoints para consultar el historial de métricas de dispositivos energéticos
+ *   name: Generators
+ *   description: Endpoints para obtener información sobre los generadores de energía disponibles
  */
 
 /**
  * @swagger
- * /api/devices/{deviceId}/metrics/latest:
+ * /api/generators:
  *   get:
- *     summary: Obtiene las métricas más recientes de un dispositivo
- *     description: Retorna las últimas métricas registradas para un dispositivo específico. Opcionalmente se pueden filtrar métricas específicas. Para generadores públicos (giravolt, residencia) no requiere autenticación. Para dispositivos privados requiere autenticación y ownership.
- *     tags: [Device History]
- *     security:
- *       - bearerAuth: []
- *       - {}
+ *     summary: Obtiene la lista de generadores de energía disponibles
+ *     description: Retorna todos los generadores de energía activos configurados en el sistema con su código y nombre. Este endpoint es público y no requiere autenticación.
+ *     tags: [Generators]
+ *     responses:
+ *       200:
+ *         description: Lista de generadores obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 generators:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       code:
+ *                         type: string
+ *                         description: Código único del generador
+ *                         example: "giravolt"
+ *                       name:
+ *                         type: string
+ *                         description: Nombre descriptivo del generador
+ *                         example: "Giravolt"
+ *                 totalGenerators:
+ *                   type: integer
+ *                   description: Número total de generadores activos
+ *                   example: 2
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                   description: Timestamp de la respuesta
+ *                   example: "2025-01-09T12:48:54.000Z"
+ *             example:
+ *               generators:
+ *                 - code: "giravolt"
+ *                   name: "Giravolt"
+ *                 - code: "residencia"
+ *                   name: "Residència"
+ *               totalGenerators: 2
+ *               timestamp: "2025-01-09T12:48:54.000Z"
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   description: Mensaje de error
+ *                   example: "Error cargando configuración de generadores"
+ *                 details:
+ *                   type: string
+ *                   description: Detalles adicionales del error
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                   description: Timestamp del error
+ */
+router.get('/',
+  handleValidationErrors,
+  asyncHandler(async (req, res) => {
+    try {
+      // Cargar la configuración de generadores desde el archivo YAML
+      const generatorsConfig = configLoader.loadEnergyGenerators();
+      
+      // Filtrar solo los generadores activos y transformar la estructura
+      const activeGenerators = Object.entries(generatorsConfig)
+        .filter(([code, config]) => config.active === true)
+        .map(([code, config]) => ({
+          code: code,
+          name: config.name
+        }));
+
+      logger.info('Generadores obtenidos exitosamente', {
+        totalGenerators: activeGenerators.length,
+        generators: activeGenerators.map(g => g.code)
+      });
+
+      res.json({
+        generators: activeGenerators,
+        totalGenerators: activeGenerators.length,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      logger.error('Error obteniendo generadores:', {
+        error: error.message,
+        stack: error.stack
+      });
+
+      res.status(500).json({
+        error: 'Error cargando configuración de generadores',
+        details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+        timestamp: new Date().toISOString()
+      });
+    }
+  })
+);
+
+/**
+ * @swagger
+ * /api/generators/{generatorCode}/metrics/latest:
+ *   get:
+ *     summary: Obtiene las métricas más recientes de un generador
+ *     description: Retorna las últimas métricas registradas para un generador específico. Opcionalmente se pueden filtrar métricas específicas. Este endpoint es público y no requiere autenticación.
+ *     tags: [Generators]
  *     parameters:
  *       - in: path
- *         name: deviceId
+ *         name: generatorCode
  *         required: true
  *         schema:
  *           type: string
  *           minLength: 1
- *           maxLength: 100
- *         description: ID del dispositivo (UUID o shelly_device_id)
- *         example: "123e4567-e89b-12d3-a456-426614174000"
+ *           maxLength: 50
+ *         description: Código del generador (ej. giravolt, residencia)
+ *         example: "giravolt"
  *       - in: query
  *         name: metrics
  *         required: false
@@ -63,7 +202,7 @@ const asyncHandler = (fn) => (req, res, next) => {
  *         style: form
  *         explode: false
  *         description: Lista de métricas específicas a obtener (separadas por comas)
- *         example: "power_consumption_avg,voltage_avg"
+ *         example: "power_generation_avg,voltage_avg"
  *     responses:
  *       200:
  *         description: Métricas más recientes obtenidas exitosamente
@@ -72,12 +211,12 @@ const asyncHandler = (fn) => (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/DeviceMetrics'
  *             example:
- *               deviceId: "123e4567-e89b-12d3-a456-426614174000"
+ *               deviceId: "giravolt"
  *               timestamp: "2025-01-09T18:30:00Z"
  *               metrics:
- *                 power_consumption_avg: 1250.5
- *                 voltage_avg: 230.2
  *                 power_generation_avg: 850.0
+ *                 voltage_avg: 230.2
+ *                 energy_total_sum: 1250.5
  *               totalMetrics: 3
  *       400:
  *         description: Error de validación
@@ -86,7 +225,7 @@ const asyncHandler = (fn) => (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *       404:
- *         description: Dispositivo no encontrado
+ *         description: Generador no encontrado
  *         content:
  *           application/json:
  *             schema:
@@ -98,22 +237,21 @@ const asyncHandler = (fn) => (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:deviceId/metrics/latest',
+router.get('/:generatorCode/metrics/latest',
   [
-    param('deviceId')
+    param('generatorCode')
       .isString()
-      .isLength({ min: 1, max: 100 })
-      .withMessage('deviceId debe ser un string válido'),
+      .isLength({ min: 1, max: 50 })
+      .withMessage('generatorCode debe ser un string válido'),
     query('metrics')
       .optional()
       .isString()
       .withMessage('metrics debe ser una cadena de texto')
   ],
   handleValidationErrors,
-  ...optionalAuthWithDeviceAccess,
-  logDeviceAccess,
+  validateGenerator,
   asyncHandler(async (req, res) => {
-    const { deviceId } = req.params;
+    const { generatorCode } = req.params;
     const { metrics } = req.query;
 
     // Procesar métricas específicas si se proporcionan
@@ -122,37 +260,43 @@ router.get('/:deviceId/metrics/latest',
       metricNames = metrics.split(',').map(m => m.trim()).filter(m => m.length > 0);
     }
 
-    const result = await deviceHistoryService.getLatestMetrics(deviceId, metricNames);
+    const result = await deviceHistoryService.getLatestMetrics(generatorCode, metricNames);
+    
+    logger.info('Métricas más recientes de generador obtenidas', {
+      generatorCode,
+      generatorName: req.generatorInfo.name,
+      metricsCount: result.totalMetrics,
+      requestedMetrics: metricNames
+    });
+
     res.json(result);
   })
 );
 
 /**
  * @swagger
- * /api/devices/{deviceId}/metrics/{metricName}/evolution:
+ * /api/generators/{generatorCode}/metrics/{metricName}/evolution:
  *   get:
- *     summary: Obtiene la evolución temporal de una métrica específica
- *     description: Retorna la evolución de una métrica en un rango de fechas con agregación temporal configurable. Para generadores públicos (giravolt, residencia) no requiere autenticación. Para dispositivos privados requiere autenticación y ownership.
- *     tags: [Device History]
- *     security:
- *       - bearerAuth: []
- *       - {}
+ *     summary: Obtiene la evolución temporal de una métrica específica de un generador
+ *     description: Retorna la evolución de una métrica en un rango de fechas con agregación temporal configurable. Este endpoint es público y no requiere autenticación.
+ *     tags: [Generators]
  *     parameters:
  *       - in: path
- *         name: deviceId
+ *         name: generatorCode
  *         required: true
  *         schema:
  *           type: string
  *           minLength: 1
- *           maxLength: 100
- *         description: ID del dispositivo (UUID o shelly_device_id)
+ *           maxLength: 50
+ *         description: Código del generador (ej. giravolt, residencia)
+ *         example: "giravolt"
  *       - in: path
  *         name: metricName
  *         required: true
  *         schema:
  *           type: string
  *         description: Nombre de la métrica a consultar
- *         example: "power_consumption_avg"
+ *         example: "power_generation_avg"
  *       - in: query
  *         name: startDate
  *         required: true
@@ -199,7 +343,7 @@ router.get('/:deviceId/metrics/latest',
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *       404:
- *         description: Dispositivo no encontrado
+ *         description: Generador no encontrado
  *         content:
  *           application/json:
  *             schema:
@@ -211,12 +355,12 @@ router.get('/:deviceId/metrics/latest',
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:deviceId/metrics/:metricName/evolution',
+router.get('/:generatorCode/metrics/:metricName/evolution',
   [
-    param('deviceId')
+    param('generatorCode')
       .isString()
-      .isLength({ min: 1, max: 100 })
-      .withMessage('deviceId debe ser un string válido'),
+      .isLength({ min: 1, max: 50 })
+      .withMessage('generatorCode debe ser un string válido'),
     param('metricName')
       .isString()
       .isLength({ min: 1, max: 100 })
@@ -237,14 +381,13 @@ router.get('/:deviceId/metrics/:metricName/evolution',
       .withMessage('limit debe ser un entero entre 1 y 10000')
   ],
   handleValidationErrors,
-  ...optionalAuthWithDeviceAccess,
-  logDeviceAccess,
+  validateGenerator,
   asyncHandler(async (req, res) => {
-    const { deviceId, metricName } = req.params;
+    const { generatorCode, metricName } = req.params;
     const { startDate, endDate, aggregation = '1h', limit } = req.query;
 
     const result = await deviceHistoryService.getMetricEvolution(
-      deviceId,
+      generatorCode,
       metricName,
       startDate,
       endDate,
@@ -252,29 +395,36 @@ router.get('/:deviceId/metrics/:metricName/evolution',
       limit ? parseInt(limit) : null
     );
 
+    logger.info('Evolución de métrica de generador obtenida', {
+      generatorCode,
+      generatorName: req.generatorInfo.name,
+      metricName,
+      aggregation,
+      dataPoints: result.totalPoints,
+      dateRange: `${startDate} - ${endDate}`
+    });
+
     res.json(result);
   })
 );
 
 /**
  * @swagger
- * /api/devices/{deviceId}/metrics:
+ * /api/generators/{generatorCode}/metrics:
  *   get:
- *     summary: Obtiene múltiples métricas de un dispositivo en un rango de tiempo
- *     description: Retorna múltiples métricas para un dispositivo en un período específico con agregación temporal. Para generadores públicos (giravolt, residencia) no requiere autenticación. Para dispositivos privados requiere autenticación y ownership.
- *     tags: [Device History]
- *     security:
- *       - bearerAuth: []
- *       - {}
+ *     summary: Obtiene múltiples métricas de un generador en un rango de tiempo
+ *     description: Retorna múltiples métricas para un generador en un período específico con agregación temporal. Este endpoint es público y no requiere autenticación.
+ *     tags: [Generators]
  *     parameters:
  *       - in: path
- *         name: deviceId
+ *         name: generatorCode
  *         required: true
  *         schema:
  *           type: string
  *           minLength: 1
- *           maxLength: 100
- *         description: ID del dispositivo (UUID o shelly_device_id)
+ *           maxLength: 50
+ *         description: Código del generador (ej. giravolt, residencia)
+ *         example: "giravolt"
  *       - in: query
  *         name: startDate
  *         required: true
@@ -282,6 +432,7 @@ router.get('/:deviceId/metrics/:metricName/evolution',
  *           type: string
  *           format: date-time
  *         description: Fecha de inicio del rango
+ *         example: "2025-01-08T00:00:00Z"
  *       - in: query
  *         name: endDate
  *         required: true
@@ -289,6 +440,7 @@ router.get('/:deviceId/metrics/:metricName/evolution',
  *           type: string
  *           format: date-time
  *         description: Fecha de fin del rango
+ *         example: "2025-01-09T00:00:00Z"
  *       - in: query
  *         name: metrics
  *         required: false
@@ -299,6 +451,7 @@ router.get('/:deviceId/metrics/:metricName/evolution',
  *         style: form
  *         explode: false
  *         description: Lista de métricas específicas (separadas por comas)
+ *         example: "power_generation_avg,energy_total_sum"
  *       - in: query
  *         name: aggregation
  *         required: false
@@ -368,7 +521,7 @@ router.get('/:deviceId/metrics/:metricName/evolution',
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *       404:
- *         description: Dispositivo no encontrado
+ *         description: Generador no encontrado
  *         content:
  *           application/json:
  *             schema:
@@ -380,12 +533,12 @@ router.get('/:deviceId/metrics/:metricName/evolution',
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:deviceId/metrics',
+router.get('/:generatorCode/metrics',
   [
-    param('deviceId')
+    param('generatorCode')
       .isString()
-      .isLength({ min: 1, max: 100 })
-      .withMessage('deviceId debe ser un string válido'),
+      .isLength({ min: 1, max: 50 })
+      .withMessage('generatorCode debe ser un string válido'),
     query('startDate')
       .isISO8601()
       .withMessage('startDate debe ser una fecha válida en formato ISO8601'),
@@ -406,10 +559,9 @@ router.get('/:deviceId/metrics',
       .withMessage('limit debe ser un entero entre 1 y 10000')
   ],
   handleValidationErrors,
-  ...optionalAuthWithDeviceAccess,
-  logDeviceAccess,
+  validateGenerator,
   asyncHandler(async (req, res) => {
-    const { deviceId } = req.params;
+    const { generatorCode } = req.params;
     const { startDate, endDate, metrics, aggregation = '1h', limit = 1000 } = req.query;
 
     // Procesar métricas específicas si se proporcionan
@@ -419,7 +571,7 @@ router.get('/:deviceId/metrics',
     }
 
     const result = await deviceHistoryService.getDeviceMetrics(
-      deviceId,
+      generatorCode,
       startDate,
       endDate,
       metricNames,
@@ -427,36 +579,52 @@ router.get('/:deviceId/metrics',
       parseInt(limit)
     );
 
+    logger.info('Métricas múltiples de generador obtenidas', {
+      generatorCode,
+      generatorName: req.generatorInfo.name,
+      metricsCount: result.totalMetrics,
+      totalDataPoints: result.totalDataPoints,
+      requestedMetrics: metricNames,
+      dateRange: `${startDate} - ${endDate}`
+    });
+
     res.json(result);
   })
 );
 
 /**
  * @swagger
- * /api/devices/{deviceId}/info:
+ * /api/generators/{generatorCode}/info:
  *   get:
- *     summary: Obtiene información básica de un dispositivo
- *     description: Retorna los metadatos y información básica de un dispositivo específico. Para generadores públicos (giravolt, residencia) no requiere autenticación. Para dispositivos privados requiere autenticación y ownership.
- *     tags: [Device History]
- *     security:
- *       - bearerAuth: []
- *       - {}
+ *     summary: Obtiene información básica de un generador
+ *     description: Retorna los metadatos y información básica de un generador específico. Este endpoint es público y no requiere autenticación.
+ *     tags: [Generators]
  *     parameters:
  *       - in: path
- *         name: deviceId
+ *         name: generatorCode
  *         required: true
  *         schema:
  *           type: string
  *           minLength: 1
- *           maxLength: 100
- *         description: ID del dispositivo (UUID o shelly_device_id)
+ *           maxLength: 50
+ *         description: Código del generador (ej. giravolt, residencia)
+ *         example: "giravolt"
  *     responses:
  *       200:
- *         description: Información del dispositivo obtenida exitosamente
+ *         description: Información del generador obtenida exitosamente
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/DeviceInfo'
+ *             example:
+ *               id: "giravolt"
+ *               device_name: "Giravolt"
+ *               device_type: "GENERATOR"
+ *               shelly_device_id: "giravolt"
+ *               created_at: "2025-01-09T18:30:00Z"
+ *               user_cups: null
+ *               user_name: null
+ *               mqtt_topic: "Dades-Fotovoltaiques-consum-giravolt32"
  *       400:
  *         description: Error de validación
  *         content:
@@ -464,7 +632,7 @@ router.get('/:deviceId/metrics',
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *       404:
- *         description: Dispositivo no encontrado
+ *         description: Generador no encontrado
  *         content:
  *           application/json:
  *             schema:
@@ -476,28 +644,33 @@ router.get('/:deviceId/metrics',
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:deviceId/info',
+router.get('/:generatorCode/info',
   [
-    param('deviceId')
+    param('generatorCode')
       .isString()
-      .isLength({ min: 1, max: 100 })
-      .withMessage('deviceId debe ser un string válido')
+      .isLength({ min: 1, max: 50 })
+      .withMessage('generatorCode debe ser un string válido')
   ],
   handleValidationErrors,
-  ...optionalAuthWithDeviceAccess,
-  logDeviceAccess,
+  validateGenerator,
   asyncHandler(async (req, res) => {
-    const { deviceId } = req.params;
+    const { generatorCode } = req.params;
 
-    const result = await deviceHistoryService.getDeviceInfo(deviceId);
+    const result = await deviceHistoryService.getDeviceInfo(generatorCode);
     
     if (!result) {
       return res.status(404).json({
-        error: 'Dispositivo no encontrado',
-        deviceId,
+        error: 'Generador no encontrado',
+        generatorCode,
         timestamp: new Date().toISOString()
       });
     }
+
+    logger.info('Información de generador obtenida', {
+      generatorCode,
+      generatorName: req.generatorInfo.name,
+      deviceType: result.device_type
+    });
 
     res.json(result);
   })
@@ -505,23 +678,21 @@ router.get('/:deviceId/info',
 
 /**
  * @swagger
- * /api/devices/{deviceId}/metrics/available:
+ * /api/generators/{generatorCode}/metrics/available:
  *   get:
- *     summary: Obtiene las métricas disponibles para un dispositivo
- *     description: Retorna una lista de todas las métricas que están disponibles para un dispositivo específico. Para generadores públicos (giravolt, residencia) no requiere autenticación. Para dispositivos privados requiere autenticación y ownership.
- *     tags: [Device History]
- *     security:
- *       - bearerAuth: []
- *       - {}
+ *     summary: Obtiene las métricas disponibles para un generador
+ *     description: Retorna una lista de todas las métricas que están disponibles para un generador específico. Este endpoint es público y no requiere autenticación.
+ *     tags: [Generators]
  *     parameters:
  *       - in: path
- *         name: deviceId
+ *         name: generatorCode
  *         required: true
  *         schema:
  *           type: string
  *           minLength: 1
- *           maxLength: 100
- *         description: ID del dispositivo (UUID o shelly_device_id)
+ *           maxLength: 50
+ *         description: Código del generador (ej. giravolt, residencia)
+ *         example: "giravolt"
  *     responses:
  *       200:
  *         description: Lista de métricas disponibles obtenida exitosamente
@@ -541,10 +712,10 @@ router.get('/:deviceId/info',
  *                   type: integer
  *                   description: Número total de métricas disponibles
  *             example:
- *               deviceId: "123e4567-e89b-12d3-a456-426614174000"
+ *               deviceId: "giravolt"
  *               availableMetrics:
- *                 - "power_consumption_avg"
- *                 - "power_consumption_max"
+ *                 - "power_generation_avg"
+ *                 - "power_generation_max"
  *                 - "voltage_avg"
  *                 - "energy_total_sum"
  *               totalMetrics: 4
@@ -555,7 +726,7 @@ router.get('/:deviceId/info',
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *       404:
- *         description: Dispositivo no encontrado
+ *         description: Generador no encontrado
  *         content:
  *           application/json:
  *             schema:
@@ -567,33 +738,39 @@ router.get('/:deviceId/info',
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:deviceId/metrics/available',
+router.get('/:generatorCode/metrics/available',
   [
-    param('deviceId')
+    param('generatorCode')
       .isString()
-      .isLength({ min: 1, max: 100 })
-      .withMessage('deviceId debe ser un string válido')
+      .isLength({ min: 1, max: 50 })
+      .withMessage('generatorCode debe ser un string válido')
   ],
   handleValidationErrors,
-  ...optionalAuthWithDeviceAccess,
-  logDeviceAccess,
+  validateGenerator,
   asyncHandler(async (req, res) => {
-    const { deviceId } = req.params;
+    const { generatorCode } = req.params;
 
-    // Verificar que el dispositivo existe
-    const deviceExists = await deviceHistoryService.validateDevice(deviceId);
+    // Verificar que el generador existe
+    const deviceExists = await deviceHistoryService.validateDevice(generatorCode);
     if (!deviceExists) {
       return res.status(404).json({
-        error: 'Dispositivo no encontrado',
-        deviceId,
+        error: 'Generador no encontrado',
+        generatorCode,
         timestamp: new Date().toISOString()
       });
     }
 
-    const availableMetrics = await deviceHistoryService.getAvailableMetrics(deviceId);
+    const availableMetrics = await deviceHistoryService.getAvailableMetrics(generatorCode);
+
+    logger.info('Métricas disponibles de generador obtenidas', {
+      generatorCode,
+      generatorName: req.generatorInfo.name,
+      totalMetrics: availableMetrics.length,
+      metrics: availableMetrics
+    });
 
     res.json({
-      deviceId,
+      deviceId: generatorCode,
       availableMetrics,
       totalMetrics: availableMetrics.length
     });
@@ -602,79 +779,11 @@ router.get('/:deviceId/metrics/available',
 
 /**
  * @swagger
- * /api/devices/history/stats:
+ * /api/generators/health:
  *   get:
- *     summary: Obtiene estadísticas del servicio de historial
- *     description: Retorna estadísticas detalladas sobre el rendimiento y uso del servicio de historial de dispositivos.
- *     tags: [Device History]
- *     responses:
- *       200:
- *         description: Estadísticas obtenidas exitosamente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 totalQueries:
- *                   type: integer
- *                   description: Número total de consultas realizadas
- *                 totalLatestMetricsQueries:
- *                   type: integer
- *                   description: Consultas de métricas más recientes
- *                 totalEvolutionQueries:
- *                   type: integer
- *                   description: Consultas de evolución temporal
- *                 totalErrors:
- *                   type: integer
- *                   description: Número total de errores
- *                 averageQueryTime:
- *                   type: integer
- *                   description: Tiempo promedio de consulta en milisegundos
- *                 totalQueryTime:
- *                   type: integer
- *                   description: Tiempo total de consultas en milisegundos
- *                 cacheHits:
- *                   type: integer
- *                   description: Número de aciertos en cache
- *                 cacheMisses:
- *                   type: integer
- *                   description: Número de fallos en cache
- *                 cacheSize:
- *                   type: integer
- *                   description: Tamaño actual del cache
- *                 cacheHitRate:
- *                   type: string
- *                   description: Porcentaje de aciertos en cache
- *                 limits:
- *                   type: object
- *                   properties:
- *                     maxDataPoints:
- *                       type: integer
- *                     maxDaysRange:
- *                       type: integer
- *                     defaultPageSize:
- *                       type: integer
- *       500:
- *         description: Error interno del servidor
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- */
-router.get('/history/stats',
-  asyncHandler(async (req, res) => {
-    const stats = deviceHistoryService.getStats();
-    res.json(stats);
-  })
-);
-
-/**
- * @swagger
- * /api/devices/history/health:
- *   get:
- *     summary: Verifica la salud del servicio de historial
- *     description: Realiza un health check del servicio de historial de dispositivos y su conectividad con la base de datos.
- *     tags: [Device History]
+ *     summary: Verifica la salud del servicio de generadores
+ *     description: Realiza un health check del servicio de generadores verificando que el archivo de configuración sea accesible.
+ *     tags: [Generators]
  *     responses:
  *       200:
  *         description: Servicio saludable
@@ -686,12 +795,20 @@ router.get('/history/stats',
  *                 status:
  *                   type: string
  *                   enum: [healthy, unhealthy]
+ *                   example: "healthy"
  *                 timestamp:
  *                   type: string
  *                   format: date-time
+ *                   example: "2025-01-09T12:48:54.000Z"
  *                 service:
  *                   type: string
- *                   example: "DeviceHistoryService"
+ *                   example: "GeneratorsService"
+ *                 configFile:
+ *                   type: string
+ *                   description: Ruta del archivo de configuración
+ *                 totalGenerators:
+ *                   type: integer
+ *                   description: Número de generadores cargados
  *       500:
  *         description: Servicio no saludable
  *         content:
@@ -707,119 +824,36 @@ router.get('/history/stats',
  *                   format: date-time
  *                 service:
  *                   type: string
- *                   example: "DeviceHistoryService"
+ *                   example: "GeneratorsService"
  *                 error:
  *                   type: string
+ *                   description: Descripción del error
  */
-router.get('/history/health',
+router.get('/health',
   asyncHandler(async (req, res) => {
-    const isHealthy = await deviceHistoryService.healthCheck();
-    
-    const response = {
-      status: isHealthy ? 'healthy' : 'unhealthy',
-      timestamp: new Date().toISOString(),
-      service: 'DeviceHistoryService'
-    };
+    try {
+      // Intentar cargar la configuración para verificar que todo funciona
+      const generatorsConfig = configLoader.loadEnergyGenerators();
+      const totalGenerators = Object.keys(generatorsConfig).length;
 
-    if (!isHealthy) {
-      response.error = 'Health check falló - revisar logs para más detalles';
-      return res.status(500).json(response);
+      res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        service: 'GeneratorsService',
+        configFile: 'energy-generators.yml',
+        totalGenerators
+      });
+
+    } catch (error) {
+      logger.error('Health check falló para generadores:', error);
+
+      res.status(500).json({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        service: 'GeneratorsService',
+        error: 'No se pudo cargar la configuración de generadores'
+      });
     }
-
-    res.json(response);
-  })
-);
-
-/**
- * @swagger
- * /api/devices/history/cache/clear:
- *   post:
- *     summary: Limpia el cache del servicio de historial
- *     description: Limpia el cache de metadatos de dispositivos del servicio de historial. Requiere autenticación y permisos de administrador.
- *     tags: [Device History]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Cache limpiado exitosamente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: "Cache limpiado exitosamente"
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 previousCacheSize:
- *                   type: integer
- *                   description: Tamaño del cache antes de limpiar
- *       500:
- *         description: Error interno del servidor
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- */
-router.post('/history/cache/clear',
-  authenticateToken,
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    const previousStats = deviceHistoryService.getStats();
-    const previousCacheSize = previousStats.cacheSize;
-    
-    deviceHistoryService.clearCache();
-    
-    res.json({
-      message: 'Cache limpiado exitosamente',
-      timestamp: new Date().toISOString(),
-      previousCacheSize
-    });
-  })
-);
-
-/**
- * @swagger
- * /api/devices/history/stats/reset:
- *   post:
- *     summary: Resetea las estadísticas del servicio de historial
- *     description: Resetea todas las estadísticas de rendimiento del servicio de historial de dispositivos. Requiere autenticación y permisos de administrador.
- *     tags: [Device History]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Estadísticas reseteadas exitosamente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: "Estadísticas reseteadas exitosamente"
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *       500:
- *         description: Error interno del servidor
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- */
-router.post('/history/stats/reset',
-  authenticateToken,
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    deviceHistoryService.resetStats();
-    
-    res.json({
-      message: 'Estadísticas reseteadas exitosamente',
-      timestamp: new Date().toISOString()
-    });
   })
 );
 

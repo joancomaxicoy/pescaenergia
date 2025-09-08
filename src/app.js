@@ -5,10 +5,19 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
+const { engine } = require('express-handlebars');
+const cookieParser = require('cookie-parser');
+const path = require('path');
 const logger = require('./utils/logger');
 
 // Importar rutas
 const deviceHistoryRoutes = require('./routes/deviceHistory');
+const authRoutes = require('./routes/auth');
+const cupsRoutes = require('./routes/cupsAssignment');
+const frontendRoutes = require('./routes/frontend');
+const generatorRoutes = require('./routes/generators');
+const userParticipationRoutes = require('./routes/userParticipation');
+const dashboardRoutes = require('./routes/dashboard');
 
 class ExpressApp {
   constructor() {
@@ -21,8 +30,48 @@ class ExpressApp {
   }
 
   setupMiddleware() {
-    // Seguridad
-    this.app.use(helmet());
+    // Configurar Handlebars como motor de plantillas
+    this.app.engine('hbs', engine({
+      extname: '.hbs',
+      defaultLayout: 'main',
+      layoutsDir: path.join(__dirname, 'templates/layouts'),
+      partialsDir: path.join(__dirname, 'templates/partials'),
+      helpers: {
+        formatDate: (date) => {
+          if (!date) return '';
+          return new Date(date).toLocaleDateString('ca-ES', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        }
+      }
+    }));
+    this.app.set('view engine', 'hbs');
+    this.app.set('views', path.join(__dirname, 'templates'));
+
+    // Servir archivos estáticos
+    this.app.use(express.static(path.join(__dirname, 'public')));
+
+    // Cookie parser
+    this.app.use(cookieParser());
+
+    // Seguridad (configurar CSP para permitir Google APIs)
+    this.app.use(helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'", "https://accounts.google.com", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+          connectSrc: ["'self'", "https://accounts.google.com"],
+          frameSrc: ["https://accounts.google.com"],
+          imgSrc: ["'self'", "data:", "https:"]
+        }
+      }
+    }));
     
     // CORS
     this.app.use(cors({
@@ -79,6 +128,14 @@ class ExpressApp {
           }
         ],
         components: {
+          securitySchemes: {
+            bearerAuth: {
+              type: 'http',
+              scheme: 'bearer',
+              bearerFormat: 'JWT',
+              description: 'Introduce el token JWT en el formato: Bearer <token>'
+            }
+          },
           schemas: {
             Error: {
               type: 'object',
@@ -242,23 +299,61 @@ class ExpressApp {
     });
 
     // Rutas de la API
+    this.app.use('/api/auth', authRoutes);
     this.app.use('/api/devices', deviceHistoryRoutes);
+    this.app.use('/api/cups', cupsRoutes);
+    this.app.use('/api/generators', generatorRoutes);
+    this.app.use('/api/user-participation', userParticipationRoutes);
+    this.app.use('/api/dashboard', dashboardRoutes);
+
+    // Rutas del frontend (área de usuario)
+    this.app.use('/area-usuari', frontendRoutes);
+
+    // Rutas de redirección globales para compatibilidad con la home
+    this.app.get('/register', (req, res) => {
+      res.redirect('/area-usuari/login');
+    });
+
+    this.app.get('/login', (req, res) => {
+      res.redirect('/area-usuari/login');
+    });
+
+    this.app.get('/signin', (req, res) => {
+      res.redirect('/area-usuari/login');
+    });
+
+    this.app.get('/signup', (req, res) => {
+      res.redirect('/area-usuari/login');
+    });
 
     // Ruta por defecto
     this.app.get('/', (req, res) => {
       res.json({
         message: 'PescaEnergia Backend API v2.0',
         documentation: '/api-docs',
-        health: '/health'
+        health: '/health',
+        userArea: '/area-usuari'
       });
     });
 
     // 404 handler
     this.app.use((req, res) => {
-      res.status(404).json({
-        error: 'Endpoint no encontrado',
-        path: req.originalUrl,
-        timestamp: new Date().toISOString()
+      // Si es una ruta de API, devolver JSON
+      if (req.originalUrl.startsWith('/api/')) {
+        return res.status(404).json({
+          error: 'Endpoint no encontrado',
+          path: req.originalUrl,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Para otras rutas, mostrar página 404
+      res.status(404).render('pages/404', {
+        title: 'Pàgina no trobada',
+        layout: 'main',
+        showNavbar: false,
+        showFooter: true,
+        path: req.originalUrl
       });
     });
   }

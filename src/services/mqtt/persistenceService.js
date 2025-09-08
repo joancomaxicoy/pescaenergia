@@ -259,8 +259,8 @@ class PersistenceService {
         // Para dispositivos CIRCUTOR, el deviceId es el CUPS
         userId = await this.findOrCreateUserByCups(deviceId);
       } else {
-        // Para otros dispositivos, usar usuario por defecto
-        userId = await this.getOrCreateDefaultUser();
+        // Para otros dispositivos, usar "not_assigned"
+        userId = 'not_assigned';
       }
 
       if (!userId) {
@@ -282,7 +282,8 @@ class PersistenceService {
         logger.info('Dispositivo creado exitosamente', { 
           deviceId, 
           deviceUuid, 
-          deviceType 
+          deviceType,
+          userId 
         });
       }
 
@@ -340,48 +341,6 @@ class PersistenceService {
     }
   }
 
-  /**
-   * Obtiene o crea el usuario por defecto para dispositivos no asignados
-   * @returns {string|null} - UUID del usuario por defecto
-   */
-  async getOrCreateDefaultUser() {
-    const defaultCups = 'SISTEMA_AUTO';
-    
-    try {
-      // Buscar usuario por defecto existente
-      const result = await database.query(
-        'SELECT id FROM users WHERE cups = $1',
-        [defaultCups]
-      );
-
-      if (result.rows.length > 0) {
-        return result.rows[0].id;
-      }
-
-      // Crear usuario por defecto
-      logger.info('Creando usuario por defecto del sistema');
-
-      const insertResult = await database.query(`
-        INSERT INTO users (cups, email, name, password_hash)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id
-      `, [
-        defaultCups,
-        'sistema@energina.local',
-        'Dispositivos Automáticos',
-        'system_default_user'
-      ]);
-
-      const userId = insertResult.rows[0].id;
-      logger.info('Usuario por defecto creado', { userId });
-      
-      return userId;
-
-    } catch (error) {
-      logger.error('Error creando usuario por defecto:', error);
-      return null;
-    }
-  }
 
   /**
    * Crea un nuevo dispositivo en la base de datos
@@ -395,6 +354,13 @@ class PersistenceService {
         VALUES ($1, $2, $3, $4)
         RETURNING id
       `, [userId, shellyDeviceId, deviceName, deviceType]);
+
+      logger.debug('Dispositivo creado en BD', {
+        deviceUuid: result.rows[0].id,
+        shellyDeviceId,
+        userId,
+        deviceType
+      });
 
       return result.rows[0].id;
 

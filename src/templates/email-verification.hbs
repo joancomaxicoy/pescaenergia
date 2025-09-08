@@ -1,0 +1,54 @@
+{{> header title="Verifica el teu compte"}}
+
+<h1 class="title">Benvingut a PescaEnergia!</h1>
+
+<p class="subtitle">Hola {{userName}},</p>
+
+<p class="text">
+    Gràcies per registrar-te a PescaEnergia, la teva plataforma de gestió energètica intel·ligent. 
+    Per completar el teu registre i començar a monitoritzar el teu consum energètic, necessitem 
+    verificar la teva adreça de correu electrònic.
+</p>
+
+<div class="button-container">
+    <a href="{{verificationUrl}}" class="primary-button">
+        Verificar el meu compte
+    </a>
+</div>
+
+<p class="text">
+    Si el botó no funciona, també pots copiar i enganxar el següent enllaç al teu navegador:
+</p>
+
+<div class="alternative-link">
+    {{verificationUrl}}
+</div>
+
+<div class="security-note note-box">
+    <strong>Nota de seguretat:</strong> Aquest enllaç de verificació expirarà en 24 hores per motius de seguretat. 
+    Si no verifiques el teu compte dins d'aquest temps, podràs sol·licitar un nou enllaç de verificació.
+</div>
+
+<p class="text">
+    Un cop verificat el teu compte, podràs:
+</p>
+<ul style="color: #333; margin-left: 20px;">
+    <li>Accedir al teu panell de control personalitzat</li>
+    <li>Monitoritzar el teu consum energètic en temps real</li>
+    <li>Configurar automatitzacions intel·ligents</li>
+    <li>Rebre informes detallats del teu consum</li>
+</ul>
+
+<p class="text">
+    Si no has creat un compte a PescaEnergia, pots ignorar aquest correu de forma segura.
+</p>
+
+<p class="text">
+    Gràcies per confiar en PescaEnergia per optimitzar el teu consum energètic!
+</p>
+
+<p style="color: #1b4444; font-weight: 500; margin-top: 30px;">
+    L'equip de PescaEnergia
+</p>
+
+{{> footer}}

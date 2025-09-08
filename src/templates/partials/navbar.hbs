@@ -1,0 +1,33 @@
+<nav class="navbar">
+    <div class="container">
+        <div class="navbar-brand">
+            <img src="/images/pescaenergia-logo.png" alt="PescaEnergia" class="logo">
+        </div>
+        
+        <div class="navbar-menu">
+            <div class="navbar-nav">
+                <a href="/area-usuari" class="nav-link {{#if isDashboard}}active{{/if}}">
+                    Dashboard
+                </a>
+                
+                <div class="nav-dropdown">
+                    <button class="nav-link dropdown-toggle" id="userDropdown">
+                        {{user.name}}
+                        <svg class="dropdown-icon" width="16" height="16" viewBox="0 0 16 16">
+                            <path d="M8 11L3 6h10l-5 5z"/>
+                        </svg>
+                    </button>
+                    <div class="dropdown-menu" id="userDropdownMenu">
+                        <a href="#" class="dropdown-item" id="showProfileBtn">
+                            Perfil
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="#" class="dropdown-item" id="logoutBtn">
+                            Tancar sessió
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
