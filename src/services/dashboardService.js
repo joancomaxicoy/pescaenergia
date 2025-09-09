@@ -451,15 +451,18 @@ class DashboardService {
         }
       });
 
-      // Formatear labels para mostrar
+      // Formatear labels para mostrar en Europe/Madrid
       const labels = sortedTimestamps.map(timestamp => {
         const date = new Date(timestamp);
+        const options = { timeZone: 'Europe/Madrid' };
+        
         if (period === '24h') {
-          return date.toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' });
+          return date.toLocaleTimeString('ca-ES', { ...options, hour: '2-digit', minute: '2-digit' });
         } else if (period === '7d') {
-          return date.toLocaleDateString('ca-ES', { weekday: 'short', hour: '2-digit' });
+          return date.toLocaleDateString('ca-ES', { ...options, weekday: 'short' }) + ' ' + 
+                 date.toLocaleTimeString('ca-ES', { ...options, hour: '2-digit' });
         } else {
-          return date.toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' });
+          return date.toLocaleDateString('ca-ES', { ...options, day: 'numeric', month: 'short' });
         }
       });
 

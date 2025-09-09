@@ -63,12 +63,12 @@ class ExpressApp {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://accounts.google.com"],
           fontSrc: ["'self'", "https://fonts.gstatic.com"],
-          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'", "https://accounts.google.com", "https://cdn.jsdelivr.net", "https://unpkg.com"],
-          connectSrc: ["'self'", "https://accounts.google.com"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'", "https://accounts.google.com", "https://apis.google.com", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+          connectSrc: ["'self'", "https://accounts.google.com", "https://www.googleapis.com"],
           frameSrc: ["https://accounts.google.com"],
-          imgSrc: ["'self'", "data:", "https:"]
+          imgSrc: ["'self'", "data:", "https:", "https://lh3.googleusercontent.com"]
         }
       }
     }));

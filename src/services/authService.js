@@ -151,15 +151,25 @@ class AuthService {
         throw new Error(`Dades de Google invàlides: ${validation.errors.join(', ')}`);
       }
 
-      // Buscar usuario existente por Google ID
+      logger.info('Procesando login con Google', { 
+        googleId: googleUserInfo.googleId,
+        email: googleUserInfo.email,
+        name: googleUserInfo.name
+      });
+
+      // Buscar usuario existente por Google ID primero
       let user = await User.findByGoogleId(googleUserInfo.googleId);
 
-      if (!user) {
-        // Buscar por email en caso de que el usuario ya exista
+      if (user) {
+        // Usuario ya existe con Google ID, actualizar información si es necesario
+        logger.info('Usuario encontrado por Google ID', { userId: user.id });
+      } else {
+        // Buscar por email en caso de que el usuario ya exista sin Google ID
         user = await User.findByEmail(googleUserInfo.email);
         
         if (user) {
-          // Usuario existe pero no tiene Google ID, actualizar
+          // Usuario existe pero no tiene Google ID, vincular cuenta
+          logger.info('Vinculando cuenta existente con Google', { userId: user.id });
           const query = `
             UPDATE users 
             SET google_id = $1, email_validated = true, updated_at = NOW()
@@ -169,17 +179,24 @@ class AuthService {
           const result = await require('../utils/database').query(query, [googleUserInfo.googleId, user.id]);
           user = new User(result.rows[0]);
         } else {
-          // Crear nuevo usuario
+          // Crear nuevo usuario - solo guardamos nombre y email como solicitas
+          logger.info('Creando nuevo usuario con Google', { email: googleUserInfo.email });
           user = await User.create({
             email: googleUserInfo.email,
             name: googleUserInfo.name,
             role: 'user',
             google_id: googleUserInfo.googleId,
-            email_validated: true // Google ya verificó el email
+            email_validated: true, // Google ya verificó el email
+            cups: null // Se asignará después
           });
 
           // Enviar email de bienvenida
-          await emailService.sendWelcomeEmail(user);
+          try {
+            await emailService.sendWelcomeEmail(user);
+          } catch (emailError) {
+            // No fallar el login si el email falla
+            logger.error('Error enviando email de bienvenida:', emailError);
+          }
         }
       }
 
@@ -189,7 +206,8 @@ class AuthService {
 
       logger.info('Login con Google exitoso', { 
         userId: user.id, 
-        email: user.email 
+        email: user.email,
+        hasCups: !!user.cups
       });
 
       return {

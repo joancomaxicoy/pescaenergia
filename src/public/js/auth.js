@@ -1,42 +1,87 @@
 // Global authentication utilities
 class AuthManager {
     constructor() {
-        this.initializeGoogleAuth();
+        this.googleAuthReady = false;
         this.setupDropdownHandlers();
+        this.waitForGoogleAndInitialize();
+    }
+
+    // Wait for Google library to load and then initialize
+    async waitForGoogleAndInitialize() {
+        const maxAttempts = 20; // 10 segundos máximo
+        let attempts = 0;
+        
+        const checkGoogle = () => {
+            attempts++;
+            
+            if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+                console.log('Google Sign-In library cargada correctamente');
+                this.initializeGoogleAuth();
+                return;
+            }
+            
+            if (attempts >= maxAttempts) {
+                console.error('Timeout esperando Google Sign-In library');
+                return;
+            }
+            
+            console.log(`Esperando Google Sign-In library... intento ${attempts}/${maxAttempts}`);
+            setTimeout(checkGoogle, 500);
+        };
+        
+        checkGoogle();
     }
 
     // Initialize Google Sign-In
     async initializeGoogleAuth() {
-        if (typeof google !== 'undefined') {
-            try {
-                await google.accounts.id.initialize({
-                    client_id: this.getGoogleClientId(),
-                    callback: this.handleGoogleResponse.bind(this)
-                });
-            } catch (error) {
-                console.error('Error initializing Google Auth:', error);
+        try {
+            const clientId = this.getGoogleClientId();
+            if (!clientId) {
+                console.error('No se puede inicializar Google Auth: Client ID no disponible');
+                return;
             }
+            
+            await google.accounts.id.initialize({
+                client_id: clientId,
+                callback: this.handleGoogleResponse.bind(this)
+            });
+            
+            this.googleAuthReady = true;
+            console.log('Google Auth inicializado correctamente');
+        } catch (error) {
+            console.error('Error initializing Google Auth:', error);
         }
     }
 
     // Get Google Client ID from environment or meta tag
     getGoogleClientId() {
         const metaTag = document.querySelector('meta[name="google-client-id"]');
-        return metaTag ? metaTag.content : 'YOUR_GOOGLE_CLIENT_ID';
+        const clientId = metaTag ? metaTag.content : null;
+        
+        if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID') {
+            console.error('Google Client ID no configurado correctamente');
+            return null;
+        }
+        
+        console.log('Google Client ID encontrado:', clientId.substring(0, 20) + '...');
+        return clientId;
     }
 
     // Handle Google authentication response
     async handleGoogleResponse(response) {
         try {
+            console.log('Procesando respuesta de Google...');
             const result = await this.loginWithGoogle(response.credential);
             if (result.success) {
+                console.log('Login con Google exitoso:', result.data.user);
                 this.handleAuthSuccess(result.data);
             } else {
+                console.error('Error en login con Google:', result.error);
                 this.showAlert('error', result.error || 'Error amb l\'autenticació de Google');
             }
         } catch (error) {
             console.error('Google auth error:', error);
-            this.showAlert('error', 'Error de connexió amb Google');
+            this.showAlert('error', 'Error de connexió amb Google. Torna-ho a intentar.');
         }
     }
 
@@ -548,20 +593,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (googleLoginBtn) {
         googleLoginBtn.addEventListener('click', function() {
-            if (typeof google !== 'undefined') {
+            if (authManager.googleAuthReady && typeof google !== 'undefined') {
                 google.accounts.id.prompt();
+            } else if (typeof google === 'undefined') {
+                authManager.showAlert('error', 'Google Sign-In no està disponible. Recarrega la pàgina i torna-ho a intentar.');
             } else {
-                authManager.showAlert('error', 'Google Sign-In no està disponible');
+                authManager.showAlert('error', 'Google Sign-In s\'està carregant. Espera uns segons i torna-ho a intentar.');
             }
         });
     }
 
     if (googleRegisterBtn) {
         googleRegisterBtn.addEventListener('click', function() {
-            if (typeof google !== 'undefined') {
+            if (authManager.googleAuthReady && typeof google !== 'undefined') {
                 google.accounts.id.prompt();
+            } else if (typeof google === 'undefined') {
+                authManager.showAlert('error', 'Google Sign-In no està disponible. Recarrega la pàgina i torna-ho a intentar.');
             } else {
-                authManager.showAlert('error', 'Google Sign-In no està disponible');
+                authManager.showAlert('error', 'Google Sign-In s\'està carregant. Espera uns segons i torna-ho a intentar.');
             }
         });
     }
