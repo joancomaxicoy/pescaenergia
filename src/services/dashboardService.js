@@ -598,11 +598,11 @@ class DashboardService {
         break;
       case '7d':
         startDate.setDate(startDate.getDate() - 7);
-        aggregation = '6h';
+        aggregation = '1h';
         break;
       case '30d':
         startDate.setDate(startDate.getDate() - 30);
-        aggregation = '6h';
+        aggregation = '1h';
         break;
       default:
         throw new Error('Període no vàlid');
