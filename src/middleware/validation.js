@@ -20,7 +20,7 @@ const handleValidationErrors = (req, res, next) => {
     });
 
     return res.status(400).json({
-      error: 'Datos de entrada inválidos',
+      error: 'Dades d\'entrada invàlides',
       code: 'VALIDATION_ERROR',
       details: formattedErrors
     });
@@ -33,23 +33,23 @@ const handleValidationErrors = (req, res, next) => {
 const validateRegister = [
   body('email')
     .isEmail()
-    .withMessage('Debe ser un email válido')
+    .withMessage('Ha de ser un email vàlid')
     .normalizeEmail()
     .isLength({ max: 255 })
-    .withMessage('El email no puede exceder 255 caracteres'),
+    .withMessage('L\'email no pot excedir 255 caràcters'),
   
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })
-    .withMessage('El nombre debe tener entre 2 y 100 caracteres')
+    .withMessage('El nom ha de tenir entre 2 i 100 caràcters')
     .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/)
-    .withMessage('El nombre solo puede contener letras y espacios'),
+    .withMessage('El nom només pot contenir lletres i espais'),
   
   body('password')
     .isLength({ min: 8 })
-    .withMessage('La contraseña debe tener al menos 8 caracteres')
+    .withMessage('La contrasenya ha de tenir almenys 8 caràcters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('La contraseña debe contener al menos una minúscula, una mayúscula y un número'),
+    .withMessage('La contrasenya ha de contenir almenys una minúscula, una majúscula i un número'),
 
   handleValidationErrors
 ];
@@ -58,12 +58,12 @@ const validateRegister = [
 const validateLogin = [
   body('email')
     .isEmail()
-    .withMessage('Debe ser un email válido')
+    .withMessage('Ha de ser un email vàlid')
     .normalizeEmail(),
   
   body('password')
     .notEmpty()
-    .withMessage('La contraseña es requerida'),
+    .withMessage('La contrasenya és obligatòria'),
 
   handleValidationErrors
 ];
@@ -72,9 +72,9 @@ const validateLogin = [
 const validateGoogleLogin = [
   body('idToken')
     .notEmpty()
-    .withMessage('Token de Google requerido')
+    .withMessage('Token de Google obligatori')
     .isLength({ min: 10 })
-    .withMessage('Token de Google inválido'),
+    .withMessage('Token de Google invàlid'),
 
   handleValidationErrors
 ];
@@ -83,9 +83,9 @@ const validateGoogleLogin = [
 const validateEmailVerification = [
   body('token')
     .notEmpty()
-    .withMessage('Token de verificación requerido')
+    .withMessage('Token de verificació obligatori')
     .isLength({ min: 32, max: 64 })
-    .withMessage('Token de verificación inválido'),
+    .withMessage('Token de verificació invàlid'),
 
   handleValidationErrors
 ];
@@ -94,7 +94,7 @@ const validateEmailVerification = [
 const validateResendVerification = [
   body('email')
     .isEmail()
-    .withMessage('Debe ser un email válido')
+    .withMessage('Ha de ser un email vàlid')
     .normalizeEmail(),
 
   handleValidationErrors
@@ -104,7 +104,7 @@ const validateResendVerification = [
 const validateForgotPassword = [
   body('email')
     .isEmail()
-    .withMessage('Debe ser un email válido')
+    .withMessage('Ha de ser un email vàlid')
     .normalizeEmail(),
 
   handleValidationErrors
@@ -114,15 +114,15 @@ const validateForgotPassword = [
 const validateResetPassword = [
   body('token')
     .notEmpty()
-    .withMessage('Token de reset requerido')
+    .withMessage('Token de reset obligatori')
     .isLength({ min: 32, max: 64 })
-    .withMessage('Token de reset inválido'),
+    .withMessage('Token de reset invàlid'),
   
   body('password')
     .isLength({ min: 8 })
-    .withMessage('La contraseña debe tener al menos 8 caracteres')
+    .withMessage('La contrasenya ha de tenir almenys 8 caràcters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('La contraseña debe contener al menos una minúscula, una mayúscula y un número'),
+    .withMessage('La contrasenya ha de contenir almenys una minúscula, una majúscula i un número'),
 
   handleValidationErrors
 ];
@@ -131,13 +131,13 @@ const validateResetPassword = [
 const validateChangePassword = [
   body('currentPassword')
     .notEmpty()
-    .withMessage('La contraseña actual es requerida'),
+    .withMessage('La contrasenya actual és obligatòria'),
   
   body('newPassword')
     .isLength({ min: 8 })
-    .withMessage('La nueva contraseña debe tener al menos 8 caracteres')
+    .withMessage('La nova contrasenya ha de tenir almenys 8 caràcters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('La nueva contraseña debe contener al menos una minúscula, una mayúscula y un número'),
+    .withMessage('La nova contrasenya ha de contenir almenys una minúscula, una majúscula i un número'),
 
   handleValidationErrors
 ];
@@ -148,15 +148,15 @@ const validateUpdateProfile = [
     .optional()
     .trim()
     .isLength({ min: 2, max: 100 })
-    .withMessage('El nombre debe tener entre 2 y 100 caracteres')
+    .withMessage('El nom ha de tenir entre 2 i 100 caràcters')
     .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/)
-    .withMessage('El nombre solo puede contener letras y espacios'),
+    .withMessage('El nom només pot contenir lletres i espais'),
   
   body('cups')
     .optional()
     .trim()
     .matches(/^ES\d{18}[A-Z]{2}\d{2}[A-Z]$/)
-    .withMessage('El CUPS debe tener el formato válido español (ES + 18 dígitos + 2 letras + 2 dígitos + 1 letra)'),
+    .withMessage('El CUPS ha de tenir el format vàlid espanyol (ES + 18 dígits + 2 lletres + 2 dígits + 1 lletra)'),
 
   handleValidationErrors
 ];
@@ -165,7 +165,7 @@ const validateUpdateProfile = [
 const validateRefreshToken = [
   body('refreshToken')
     .notEmpty()
-    .withMessage('Refresh token requerido'),
+    .withMessage('Refresh token obligatori'),
 
   handleValidationErrors
 ];
@@ -174,7 +174,7 @@ const validateRefreshToken = [
 const validateUserId = [
   param('userId')
     .isUUID()
-    .withMessage('ID de usuario debe ser un UUID válido'),
+    .withMessage('ID d\'usuari ha de ser un UUID vàlid'),
 
   handleValidationErrors
 ];
@@ -184,12 +184,12 @@ const validatePagination = [
   query('page')
     .optional()
     .isInt({ min: 1 })
-    .withMessage('La página debe ser un número entero mayor a 0'),
+    .withMessage('La pàgina ha de ser un número enter major a 0'),
   
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
-    .withMessage('El límite debe ser un número entre 1 y 100'),
+    .withMessage('El límit ha de ser un número entre 1 i 100'),
 
   handleValidationErrors
 ];
@@ -198,7 +198,7 @@ const validatePagination = [
 const validateCUPS = (value) => {
   const cupsRegex = /^ES\d{18}[A-Z]{2}\d{2}[A-Z]$/;
   if (!cupsRegex.test(value)) {
-    throw new Error('CUPS inválido');
+    throw new Error('CUPS invàlid');
   }
   return true;
 };
@@ -212,24 +212,24 @@ const validateStrongPassword = (value) => {
   const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(value);
 
   if (value.length < minLength) {
-    throw new Error(`La contraseña debe tener al menos ${minLength} caracteres`);
+    throw new Error(`La contrasenya ha de tenir almenys ${minLength} caràcters`);
   }
 
   if (!hasUpperCase) {
-    throw new Error('La contraseña debe contener al menos una letra mayúscula');
+    throw new Error('La contrasenya ha de contenir almenys una lletra majúscula');
   }
 
   if (!hasLowerCase) {
-    throw new Error('La contraseña debe contener al menos una letra minúscula');
+    throw new Error('La contrasenya ha de contenir almenys una lletra minúscula');
   }
 
   if (!hasNumbers) {
-    throw new Error('La contraseña debe contener al menos un número');
+    throw new Error('La contrasenya ha de contenir almenys un número');
   }
 
   // Opcional: requerir caracteres especiales
   // if (!hasSpecialChar) {
-  //   throw new Error('La contraseña debe contener al menos un carácter especial');
+  //   throw new Error('La contrasenya ha de contenir almenys un caràcter especial');
   // }
 
   return true;
@@ -239,7 +239,7 @@ const validateStrongPassword = (value) => {
 const validateSpanishEmail = (value) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(value)) {
-    throw new Error('Email inválido');
+    throw new Error('Email invàlid');
   }
 
   // Lista de dominios comunes españoles (opcional)

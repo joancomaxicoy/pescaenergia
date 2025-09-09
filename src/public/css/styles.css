@@ -10,8 +10,12 @@ body {
     background-color: #fdf1eb;
     color: #333;
     line-height: 1.6;
-    letter-spacing: -1.2px;
+    letter-spacing: -0.8px;
     min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6, b {
+    letter-spacing: -1.5px;
 }
 
 .container {
@@ -849,12 +853,59 @@ body {
     padding: 40px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.1);
     text-align: center;
+    position: relative;
+}
+
+/* Logout button for CUPS assignment page */
+.logout-container {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+}
+
+.logout-btn {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+}
+
+.logout-btn:hover {
+    background: #fcbd25;
+    border-color: #fcbd25;
+    transform: translateY(-2px);
+}
+
+.logout-btn i {
+    width: 20px;
+    height: 20px;
+    color: #666;
+    transition: color 0.3s ease;
+}
+
+.logout-btn:hover i {
+    color: #1b4444;
 }
 
 .cups-icon {
     font-size: 48px;
     color: #fcbd25;
     margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cups-icon .lucide-icon {
+    width: 48px;
+    height: 48px;
 }
 
 .cups-title {
@@ -1021,6 +1072,57 @@ body {
     font-size: 12px;
     margin-top: 5px;
     display: block;
+}
+
+/* Profile message styles */
+.profile-message {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid;
+    animation: slideDown 0.3s ease-out;
+}
+
+.profile-message.success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.profile-message.error {
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
+.message-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.message-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.message-text {
+    flex: 1;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Responsive */

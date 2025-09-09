@@ -51,7 +51,7 @@ class AuthService {
       });
     } catch (error) {
       logger.error('Error verificando JWT:', error);
-      throw new Error('Token inválido o expirado');
+      throw new Error('Token invàlid o caducat');
     }
   }
 
@@ -63,7 +63,7 @@ class AuthService {
       // Verificar si el usuario ya existe
       const existingUser = await User.findByEmail(email);
       if (existingUser) {
-        throw new Error('Ya existe un usuario con este email');
+        throw new Error('Ja existeix un usuari amb aquest email');
       }
 
       // Crear el usuario
@@ -102,13 +102,13 @@ class AuthService {
       // Buscar usuario
       const user = await User.findByEmail(email);
       if (!user) {
-        throw new Error('Credenciales inválidas');
+        throw new Error('Credencials invàlides');
       }
 
       // Verificar password
       const isValidPassword = await user.verifyPassword(password);
       if (!isValidPassword) {
-        throw new Error('Credenciales inválidas');
+        throw new Error('Credencials invàlides');
       }
 
       // Verificar que el email esté validado
@@ -148,7 +148,7 @@ class AuthService {
       // Validar datos de Google
       const validation = googleAuthService.validateGoogleUserData(googleUserInfo);
       if (!validation.isValid) {
-        throw new Error(`Datos de Google inválidos: ${validation.errors.join(', ')}`);
+        throw new Error(`Dades de Google invàlides: ${validation.errors.join(', ')}`);
       }
 
       // Buscar usuario existente por Google ID
@@ -209,7 +209,7 @@ class AuthService {
     try {
       const user = await User.findByEmailVerificationToken(token);
       if (!user) {
-        throw new Error('Token de verificación inválido o expirado');
+        throw new Error('Token de verificació invàlid o caducat');
       }
 
       await user.verifyEmail();
@@ -237,11 +237,11 @@ class AuthService {
     try {
       const user = await User.findByEmail(email);
       if (!user) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuari no trobat');
       }
 
       if (user.email_validated) {
-        throw new Error('El email ya está verificado');
+        throw new Error('L\'email ja està verificat');
       }
 
       // Generar nuevo token
@@ -300,7 +300,7 @@ class AuthService {
     try {
       const user = await User.findByPasswordResetToken(token);
       if (!user) {
-        throw new Error('Token de reset inválido o expirado');
+        throw new Error('Token de reset invàlid o caducat');
       }
 
       await user.updatePassword(newPassword);
@@ -325,12 +325,12 @@ class AuthService {
       const decoded = this.verifyJWT(refreshToken);
       
       if (decoded.type !== 'refresh') {
-        throw new Error('Token de refresh inválido');
+        throw new Error('Token de refresh invàlid');
       }
 
       const user = await User.findById(decoded.userId);
       if (!user) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuari no trobat');
       }
 
       // Generar nuevos tokens
@@ -357,7 +357,7 @@ class AuthService {
     try {
       const user = await User.findById(userId);
       if (!user) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuari no trobat');
       }
 
       return user.toJSON();
@@ -372,7 +372,7 @@ class AuthService {
     try {
       const user = await User.findById(userId);
       if (!user) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuari no trobat');
       }
 
       await user.updateProfile(updates);
@@ -393,13 +393,13 @@ class AuthService {
     try {
       const user = await User.findById(userId);
       if (!user) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuari no trobat');
       }
 
       // Verificar password actual
       const isValidPassword = await user.verifyPassword(currentPassword);
       if (!isValidPassword) {
-        throw new Error('Contraseña actual incorrecta');
+        throw new Error('Contrasenya actual incorrecta');
       }
 
       await user.updatePassword(newPassword);

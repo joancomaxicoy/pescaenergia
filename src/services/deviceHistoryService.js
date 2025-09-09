@@ -41,13 +41,13 @@ class DeviceHistoryService {
     try {
       // Validar deviceId
       if (!deviceId || typeof deviceId !== 'string') {
-        throw new Error('deviceId es requerido y debe ser un string válido');
+        throw new Error('deviceId és obligatori i ha de ser un string vàlid');
       }
 
       // Obtener información del dispositivo y resolver al UUID real
       const deviceInfo = await this.getDeviceInfo(deviceId);
       if (!deviceInfo) {
-        throw new Error(`Dispositivo con ID ${deviceId} no encontrado`);
+        throw new Error(`Dispositiu amb ID ${deviceId} no trobat`);
       }
 
       const realDeviceId = deviceInfo.id; // UUID real del dispositivo
@@ -149,7 +149,7 @@ class DeviceHistoryService {
       // Obtener información del dispositivo y resolver al UUID real
       const deviceInfo = await this.getDeviceInfo(deviceId);
       if (!deviceInfo) {
-        throw new Error(`Dispositivo con ID ${deviceId} no encontrado`);
+        throw new Error(`Dispositiu amb ID ${deviceId} no trobat`);
       }
 
       const realDeviceId = deviceInfo.id; // UUID real del dispositivo
@@ -247,7 +247,7 @@ class DeviceHistoryService {
     try {
       // Validaciones básicas
       if (!deviceId || typeof deviceId !== 'string') {
-        throw new Error('deviceId es requerido y debe ser un string válido');
+        throw new Error('deviceId és obligatori i ha de ser un string vàlid');
       }
 
       const start = new Date(startDate);
@@ -257,7 +257,7 @@ class DeviceHistoryService {
       // Obtener información del dispositivo y resolver al UUID real
       const deviceInfo = await this.getDeviceInfo(deviceId);
       if (!deviceInfo) {
-        throw new Error(`Dispositivo con ID ${deviceId} no encontrado`);
+        throw new Error(`Dispositiu amb ID ${deviceId} no trobat`);
       }
 
       const realDeviceId = deviceInfo.id; // UUID real del dispositivo
@@ -457,7 +457,7 @@ class DeviceHistoryService {
       // Obtener información del dispositivo y resolver al UUID real
       const deviceInfo = await this.getDeviceInfo(deviceId);
       if (!deviceInfo) {
-        throw new Error(`Dispositivo con ID ${deviceId} no encontrado`);
+        throw new Error(`Dispositiu amb ID ${deviceId} no trobat`);
       }
 
       const realDeviceId = deviceInfo.id; // UUID real del dispositivo
@@ -507,20 +507,20 @@ class DeviceHistoryService {
    */
   validateEvolutionParams(deviceId, metricName, startDate, endDate, aggregation) {
     if (!deviceId || typeof deviceId !== 'string') {
-      throw new Error('deviceId es requerido y debe ser un string válido');
+      throw new Error('deviceId és obligatori i ha de ser un string vàlid');
     }
 
     if (!metricName || typeof metricName !== 'string') {
-      throw new Error('metricName es requerido y debe ser un string válido');
+      throw new Error('metricName és obligatori i ha de ser un string vàlid');
     }
 
     if (!startDate || !endDate) {
-      throw new Error('startDate y endDate son requeridos');
+      throw new Error('startDate i endDate són obligatoris');
     }
 
     const validAggregations = ['1m', '5m', '15m', '30m', '1h', '2h', '6h', '12h', '1d', '1w', '1M'];
     if (!validAggregations.includes(aggregation)) {
-      throw new Error(`Agregación inválida. Valores válidos: ${validAggregations.join(', ')}`);
+      throw new Error(`Agregació invàlida. Valors vàlids: ${validAggregations.join(', ')}`);
     }
   }
 
@@ -531,16 +531,16 @@ class DeviceHistoryService {
    */
   validateDateRange(start, end) {
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new Error('Fechas inválidas proporcionadas');
+      throw new Error('Dates invàlides proporcionades');
     }
 
     if (start >= end) {
-      throw new Error('La fecha de inicio debe ser anterior a la fecha de fin');
+      throw new Error('La data d\'inici ha de ser anterior a la data de fi');
     }
 
     const daysDiff = (end - start) / (1000 * 60 * 60 * 24);
     if (daysDiff > this.limits.maxDaysRange) {
-      throw new Error(`El rango de fechas no puede exceder ${this.limits.maxDaysRange} días`);
+      throw new Error(`El rang de dates no pot excedir ${this.limits.maxDaysRange} dies`);
     }
   }
 

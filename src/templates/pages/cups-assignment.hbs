@@ -1,6 +1,15 @@
 <div class="cups-container">
     <div class="cups-card">
-        <div class="cups-icon">⚡</div>
+        <!-- Logout button -->
+        <div class="logout-container">
+            <button id="logoutBtn" class="logout-btn" title="Tancar sessió">
+                <i data-lucide="log-out"></i>
+            </button>
+        </div>
+        
+        <div class="cups-icon">
+            <i data-lucide="zap" class="lucide-icon"></i>
+        </div>
         <h1 class="cups-title">Assigna el teu CUPS</h1>
         <p class="cups-description">
             Per poder accedir al teu dashboard energètic, necessitem que assignis el teu CUPS 
@@ -42,11 +51,46 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Lucide icons
+    lucide.createIcons();
+    
     const form = document.getElementById('cupsForm');
     const cupsInput = document.getElementById('cups');
     const assignBtn = document.getElementById('assignBtn');
     const assignLoading = document.getElementById('assignLoading');
     const btnText = assignBtn.querySelector('.btn-text');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    // Logout functionality
+    logoutBtn.addEventListener('click', async function(e) {
+        e.preventDefault();
+        
+        try {
+            const response = await fetch('/area-usuari/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                // Clear any stored tokens
+                document.cookie = 'authToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                localStorage.removeItem('authToken');
+                
+                // Redirect to login
+                window.location.href = '/area-usuari/login';
+            } else {
+                console.error('Error during logout');
+            }
+        } catch (error) {
+            console.error('Error during logout:', error);
+            // Even if there's an error, clear tokens and redirect
+            document.cookie = 'authToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            localStorage.removeItem('authToken');
+            window.location.href = '/area-usuari/login';
+        }
+    });
 
     // Format CUPS input as user types
     cupsInput.addEventListener('input', function(e) {

@@ -17,11 +17,11 @@ class UserParticipationService {
       const generator = generators[generatorCode];
       
       if (!generator) {
-        throw new Error(`El generador '${generatorCode}' no existe`);
+        throw new Error(`El generador '${generatorCode}' no existeix`);
       }
       
       if (!generator.active) {
-        throw new Error(`El generador '${generatorCode}' no está activo`);
+        throw new Error(`El generador '${generatorCode}' no està actiu`);
       }
       
       return generator;
@@ -38,11 +38,11 @@ class UserParticipationService {
     const num = parseFloat(percentage);
     
     if (isNaN(num)) {
-      throw new Error('El porcentaje debe ser un número válido');
+      throw new Error('El percentatge ha de ser un número vàlid');
     }
     
     if (num < 0 || num > 100) {
-      throw new Error('El porcentaje debe estar entre 0 y 100');
+      throw new Error('El percentatge ha d\'estar entre 0 i 100');
     }
     
     return num;
@@ -56,13 +56,13 @@ class UserParticipationService {
       // Validar que el usuario existe
       const user = await User.findById(userId);
       if (!user) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuari no trobat');
       }
 
       // Validar que el admin existe
       const admin = await User.findById(assignedBy);
       if (!admin) {
-        throw new Error('Administrador no encontrado');
+        throw new Error('Administrador no trobat');
       }
 
       // Validar que el generador existe y está activo
@@ -74,7 +74,7 @@ class UserParticipationService {
       // Verificar si ya existe una participación para este usuario y generador
       const existingParticipation = await this.userParticipation.exists(userId, generatorCode);
       if (existingParticipation) {
-        throw new Error(`El usuario ya tiene una participación asignada en el generador '${generatorCode}'`);
+        throw new Error(`L'usuari ja té una participació assignada al generador '${generatorCode}'`);
       }
 
       // Crear la participación
@@ -114,13 +114,13 @@ class UserParticipationService {
       // Verificar que la participación existe
       const existingParticipation = await this.userParticipation.findById(participationId);
       if (!existingParticipation) {
-        throw new Error('Participación no encontrada');
+        throw new Error('Participació no trobada');
       }
 
       // Validar que el admin existe
       const admin = await User.findById(assignedBy);
       if (!admin) {
-        throw new Error('Administrador no encontrado');
+        throw new Error('Administrador no trobat');
       }
 
       // Validar porcentaje
@@ -154,7 +154,7 @@ class UserParticipationService {
       // Verificar que la participación existe
       const existingParticipation = await this.userParticipation.findById(participationId);
       if (!existingParticipation) {
-        throw new Error('Participación no encontrada');
+        throw new Error('Participació no trobada');
       }
 
       // Eliminar la participación

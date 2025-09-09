@@ -446,7 +446,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show loading
             loginBtn.disabled = true;
             btnText.style.display = 'none';
-            loginLoading.style.display = 'inline-block';
+            loginLoading.classList.remove('loading-hidden');
 
             try {
                 const result = await authManager.login(email, password);
@@ -466,7 +466,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Hide loading
                 loginBtn.disabled = false;
                 btnText.style.display = 'inline';
-                loginLoading.style.display = 'none';
+                loginLoading.classList.add('loading-hidden');
             }
         });
     }
@@ -519,7 +519,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show loading
             registerBtn.disabled = true;
             btnText.style.display = 'none';
-            registerLoading.style.display = 'inline-block';
+            registerLoading.classList.remove('loading-hidden');
 
             try {
                 const result = await authManager.register(name, email, password);
@@ -537,7 +537,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Hide loading
                 registerBtn.disabled = false;
                 btnText.style.display = 'inline';
-                registerLoading.style.display = 'none';
+                registerLoading.classList.add('loading-hidden');
             }
         });
     }

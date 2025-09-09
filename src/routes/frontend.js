@@ -62,7 +62,8 @@ const requireAuth = (req, res, next) => {
             layout: 'main',
             showNavbar: false,
             showFooter: true,
-            user: req.user.userData
+            user: req.user.userData,
+            googleClientId: process.env.GOOGLE_CLIENT_ID
         });
     }
     
@@ -107,7 +108,8 @@ router.get('/', checkAuthFromCookie, (req, res) => {
             layout: 'main',
             showNavbar: false,
             showFooter: true,
-            user: req.user.userData
+            user: req.user.userData,
+            googleClientId: process.env.GOOGLE_CLIENT_ID
         });
     }
     
@@ -151,7 +153,8 @@ router.get('/assignar-cups', checkAuthFromCookie, requireAuth, (req, res) => {
         layout: 'main',
         showNavbar: false,
         showFooter: true,
-        user: req.user.userData
+        user: req.user.userData,
+        googleClientId: process.env.GOOGLE_CLIENT_ID
     });
 });
 
@@ -190,7 +193,8 @@ router.get('/verificar-email', checkAuthFromCookie, (req, res) => {
         layout: 'main',
         showNavbar: false,
         showFooter: true,
-        user: req.user.userData
+        user: req.user.userData,
+        googleClientId: process.env.GOOGLE_CLIENT_ID
     });
 });
 

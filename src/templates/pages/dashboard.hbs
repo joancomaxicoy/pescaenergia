@@ -115,6 +115,14 @@
             <button class="modal-close" id="closeProfileBtn">&times;</button>
         </div>
         <div class="modal-body">
+            <!-- Message container for success/error feedback -->
+            <div id="profileMessage" class="profile-message" style="display: none;">
+                <div class="message-content">
+                    <i class="message-icon" data-lucide="check-circle"></i>
+                    <span class="message-text"></span>
+                </div>
+            </div>
+
             <form id="profileForm">
                 <div class="form-group">
                     <label for="profileName" class="form-label">Nom</label>

@@ -167,7 +167,7 @@ class MqttService {
    */
   async subscribeToAllTopics() {
     if (!this.isConnected) {
-      throw new Error('Cliente MQTT no conectado');
+      throw new Error('Client MQTT no connectat');
     }
 
     const allTopics = [...this.staticTopics, ...this.dynamicTopics];
@@ -285,7 +285,7 @@ class MqttService {
    */
   addMessageHandler(handler) {
     if (typeof handler !== 'function') {
-      throw new Error('El handler debe ser una función');
+      throw new Error('El handler ha de ser una funció');
     }
     this.messageHandlers.push(handler);
     logger.debug('Handler de mensaje registrado');

@@ -162,7 +162,7 @@ class DashboardService {
       const participation = await this.userParticipationService.getUserGeneratorParticipation(userId, generatorCode);
       
       if (!participation) {
-        throw new Error('No tienes participación en este generador');
+        throw new Error('No tens participació en aquest generador');
       }
 
       // Calcular fechas según el período
@@ -188,7 +188,7 @@ class DashboardService {
           aggregation = '1d';
           break;
         default:
-          throw new Error('Período no válido');
+          throw new Error('Període no vàlid');
       }
 
       // Obtener evolución de las métricas principales
@@ -270,7 +270,7 @@ class DashboardService {
       // Obtener información del usuario
       const userInfo = await this.getUserInfo(userId);
       if (!userInfo) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuari no trobat');
       }
 
       // Obtener todos los devices asociados al usuario
@@ -599,10 +599,10 @@ class DashboardService {
         break;
       case '30d':
         startDate.setDate(startDate.getDate() - 30);
-        aggregation = '1d';
+        aggregation = '6h';
         break;
       default:
-        throw new Error('Período no válido');
+        throw new Error('Període no vàlid');
     }
 
     return { startDate, endDate, aggregation };

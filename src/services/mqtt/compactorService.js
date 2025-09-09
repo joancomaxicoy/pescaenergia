@@ -379,7 +379,7 @@ class CompactorService {
    */
   setCompactionInterval(newInterval) {
     if (newInterval < 1000) {
-      throw new Error('El intervalo de compactación debe ser al menos 1 segundo');
+      throw new Error('L\'interval de compactació ha de ser almenys 1 segon');
     }
 
     const oldInterval = this.compactionInterval;
@@ -407,7 +407,7 @@ class CompactorService {
     const invalidTypes = types.filter(type => !validTypes.includes(type));
     
     if (invalidTypes.length > 0) {
-      throw new Error(`Tipos de agregación inválidos: ${invalidTypes.join(', ')}`);
+      throw new Error(`Tipus d'agregació invàlids: ${invalidTypes.join(', ')}`);
     }
 
     this.aggregationTypes = [...types];

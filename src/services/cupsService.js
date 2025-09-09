@@ -19,7 +19,7 @@ class CupsService {
 
       // Validar formato del CUPS (básico)
       if (!cups || typeof cups !== 'string' || cups.trim().length === 0) {
-        throw new Error('CUPS inválido');
+        throw new Error('CUPS invàlid');
       }
 
       const cleanCups = cups.trim();
@@ -33,7 +33,7 @@ class CupsService {
         // Verificar que el usuario objetivo existe
         const targetUser = await User.findById(targetUserId);
         if (!targetUser) {
-          throw new Error('Usuario objetivo no encontrado');
+          throw new Error('Usuari objectiu no trobat');
         }
       } else {
         // Usuario normal solo puede asignarse a sí mismo
@@ -61,11 +61,11 @@ class CupsService {
         if (previousUserId !== 'not_assigned') {
           // El device ya está asignado a un usuario
           if (requestingUserRole !== 'admin') {
-            throw new Error('Este CUPS ya está asignado a otro usuario. Solo un administrador puede reasignarlo.');
+            throw new Error('Aquest CUPS ja està assignat a un altre usuari. Només un administrador pot reassignar-lo.');
           }
           
           if (previousUserId === finalTargetUserId) {
-            throw new Error('Este CUPS ya está asignado a este usuario');
+            throw new Error('Aquest CUPS ja està assignat a aquest usuari');
           }
 
           // Admin puede reasignar: quitar CUPS del usuario anterior
@@ -124,7 +124,7 @@ class CupsService {
       );
       
       if (parseInt(duplicateCheck.rows[0].count) > 1) {
-        throw new Error('Error de consistencia: CUPS duplicado detectado');
+        throw new Error('Error de consistència: CUPS duplicat detectat');
       }
 
       await client.query('COMMIT');
@@ -278,13 +278,13 @@ class CupsService {
       const deviceResult = await client.query(deviceQuery, [cups]);
 
       if (deviceResult.rows.length === 0) {
-        throw new Error('CUPS no encontrado');
+        throw new Error('CUPS no trobat');
       }
 
       const device = deviceResult.rows[0];
       
       if (device.user_id === 'not_assigned') {
-        throw new Error('Este CUPS ya está desasignado');
+        throw new Error('Aquest CUPS ja està desassignat');
       }
 
       // Desasignar el device

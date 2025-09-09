@@ -11,8 +11,13 @@
     <link rel="apple-touch-icon" sizes="32x32" href="/favicon.png">
     <meta name="theme-color" content="#1b4444">
     
+    {{#if googleClientId}}
+    <meta name="google-client-id" content="{{googleClientId}}">
+    {{/if}}
+    
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>

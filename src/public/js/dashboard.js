@@ -488,8 +488,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const btnText = submitBtn.querySelector('.btn-text');
             const loading = document.getElementById('profileLoading');
             
+            // Hide any existing messages
+            hideProfileMessage();
+            
             if (!name) {
-                alert('El nom és obligatori');
+                showProfileMessage('El nom és obligatori', 'error');
                 return;
             }
             
@@ -521,14 +524,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (userDropdown && userDropdown.childNodes[0]) {
                         userDropdown.childNodes[0].textContent = data.name;
                     }
-                    closeProfile();
-                    alert('Perfil actualitzat correctament');
+                    
+                    // Show success message and close modal after delay
+                    showProfileMessage('Perfil actualitzat correctament', 'success');
+                    setTimeout(() => {
+                        closeProfile();
+                    }, 1500);
                 } else {
-                    alert(data.error || 'Error actualitzant el perfil');
+                    // Handle specific validation errors
+                    if (response.status === 400 && data.details && data.details.length > 0) {
+                        // Find the name field error specifically
+                        const nameError = data.details.find(detail => detail.field === 'name');
+                        if (nameError) {
+                            showProfileMessage(nameError.message, 'error');
+                        } else {
+                            showProfileMessage(data.details[0].message, 'error');
+                        }
+                    } else {
+                        // Generic error message
+                        showProfileMessage(data.error || 'Error actualitzant el perfil', 'error');
+                    }
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Error de connexió');
+                showProfileMessage('Error de connexió. Torna-ho a intentar.', 'error');
             } finally {
                 // Hide loading
                 submitBtn.disabled = false;
@@ -830,6 +849,52 @@ function setupHistoricalChartAutoRefresh() {
     }, 300000); // 5 minutes
 }
 
+// Profile message helper functions
+function showProfileMessage(message, type = 'error') {
+    const messageContainer = document.getElementById('profileMessage');
+    const messageText = messageContainer.querySelector('.message-text');
+    const messageIcon = messageContainer.querySelector('.message-icon');
+    
+    if (!messageContainer || !messageText || !messageIcon) return;
+    
+    // Set message text
+    messageText.textContent = message;
+    
+    // Remove existing type classes
+    messageContainer.classList.remove('success', 'error');
+    
+    // Add appropriate type class and icon
+    messageContainer.classList.add(type);
+    
+    if (type === 'success') {
+        messageIcon.setAttribute('data-lucide', 'check-circle');
+    } else {
+        messageIcon.setAttribute('data-lucide', 'alert-circle');
+    }
+    
+    // Show the message
+    messageContainer.style.display = 'block';
+    
+    // Reinitialize Lucide icons for the new icon
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+    
+    // Auto-hide error messages after 5 seconds
+    if (type === 'error') {
+        setTimeout(() => {
+            hideProfileMessage();
+        }, 5000);
+    }
+}
+
+function hideProfileMessage() {
+    const messageContainer = document.getElementById('profileMessage');
+    if (messageContainer) {
+        messageContainer.style.display = 'none';
+    }
+}
+
 // Make functions available globally
 window.showProfile = showProfile;
 window.loadDashboardData = loadDashboardData;
@@ -842,5 +907,7 @@ window.dashboardUtils = {
     loadHistoricalChart,
     showProfile,
     closeProfile,
-    formatRelativeTime
+    formatRelativeTime,
+    showProfileMessage,
+    hideProfileMessage
 };

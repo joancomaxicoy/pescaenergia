@@ -17,7 +17,7 @@ class GoogleAuthService {
       
       // Verificar que el token es válido
       if (!payload) {
-        throw new Error('Token de Google inválido');
+        throw new Error('Token de Google invàlid');
       }
 
       // Extraer información del usuario
@@ -38,7 +38,7 @@ class GoogleAuthService {
       return googleUserInfo;
     } catch (error) {
       logger.error('Error verificando token de Google:', error);
-      throw new Error('Token de Google inválido o expirado');
+      throw new Error('Token de Google invàlid o caducat');
     }
   }
 
@@ -48,7 +48,7 @@ class GoogleAuthService {
       const response = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${accessToken}`);
       
       if (!response.ok) {
-        throw new Error('Error obteniendo información del usuario de Google');
+        throw new Error('Error obtenint informació de l\'usuari de Google');
       }
 
       const userInfo = await response.json();
@@ -133,7 +133,7 @@ class GoogleAuthService {
       return tokens;
     } catch (error) {
       logger.error('Error intercambiando código por tokens de Google:', error);
-      throw new Error('Error en el proceso de autenticación con Google');
+      throw new Error('Error en el procés d\'autenticació amb Google');
     }
   }
 
@@ -149,7 +149,7 @@ class GoogleAuthService {
       return credentials;
     } catch (error) {
       logger.error('Error renovando token de acceso de Google:', error);
-      throw new Error('Error renovando token de Google');
+      throw new Error('Error renovant token de Google');
     }
   }
 
