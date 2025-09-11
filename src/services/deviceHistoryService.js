@@ -154,25 +154,42 @@ class DeviceHistoryService {
 
       const realDeviceId = deviceInfo.id; // UUID real del dispositivo
 
-      // Construir consulta con time_bucket para agregación temporal
+      // Construir consulta con agregación temporal usando funciones SQL estándar
+      // Convertir aggregation a segundos para date_trunc
+      const aggregationMap = {
+        '1m': '1 minute',
+        '5m': '5 minutes', 
+        '15m': '15 minutes',
+        '30m': '30 minutes',
+        '1h': '1 hour',
+        '2h': '2 hours',
+        '6h': '6 hours',
+        '12h': '12 hours',
+        '1d': '1 day',
+        '1w': '1 week',
+        '1M': '1 month'
+      };
+      
+      const truncInterval = aggregationMap[aggregation] || '1 hour';
+      
       const query = `
         SELECT 
-          time_bucket($1::interval, timestamp) AS time_bucket,
+          date_trunc('${truncInterval.split(' ')[1]}', timestamp) AS time_bucket,
           AVG(value) as avg_value,
           MIN(value) as min_value,
           MAX(value) as max_value,
           COUNT(value) as data_points
         FROM energy_metrics 
-        WHERE device_id = $2 
-          AND metric_name = $3 
-          AND timestamp >= $4 
-          AND timestamp <= $5
+        WHERE device_id = $1 
+          AND metric_name = $2 
+          AND timestamp >= $3 
+          AND timestamp <= $4
         GROUP BY time_bucket 
         ORDER BY time_bucket ASC
-        ${limit ? `LIMIT $6` : ''}
+        ${limit ? `LIMIT $5` : ''}
       `;
 
-      const params = [aggregation, realDeviceId, metricName, start, end];
+      const params = [realDeviceId, metricName, start, end];
       if (limit) {
         params.push(limit);
       }
@@ -262,26 +279,42 @@ class DeviceHistoryService {
 
       const realDeviceId = deviceInfo.id; // UUID real del dispositivo
 
-      // Construir consulta
+      // Construir consulta con agregación temporal usando funciones SQL estándar
+      const aggregationMap = {
+        '1m': '1 minute',
+        '5m': '5 minutes', 
+        '15m': '15 minutes',
+        '30m': '30 minutes',
+        '1h': '1 hour',
+        '2h': '2 hours',
+        '6h': '6 hours',
+        '12h': '12 hours',
+        '1d': '1 day',
+        '1w': '1 week',
+        '1M': '1 month'
+      };
+      
+      const truncInterval = aggregationMap[aggregation] || '1 hour';
+      
       let query = `
         SELECT 
-          time_bucket($1::interval, timestamp) AS time_bucket,
+          date_trunc('${truncInterval.split(' ')[1]}', timestamp) AS time_bucket,
           metric_name,
           AVG(value) as avg_value,
           MIN(value) as min_value,
           MAX(value) as max_value,
           COUNT(value) as data_points
         FROM energy_metrics 
-        WHERE device_id = $2 
-          AND timestamp >= $3 
-          AND timestamp <= $4
+        WHERE device_id = $1 
+          AND timestamp >= $2 
+          AND timestamp <= $3
       `;
 
-      const params = [aggregation, realDeviceId, start, end];
+      const params = [realDeviceId, start, end];
 
       // Filtrar por métricas específicas si se proporcionan
       if (metricNames && Array.isArray(metricNames) && metricNames.length > 0) {
-        const placeholders = metricNames.map((_, index) => `$${index + 5}`).join(', ');
+        const placeholders = metricNames.map((_, index) => `$${index + 4}`).join(', ');
         query += ` AND metric_name IN (${placeholders})`;
         params.push(...metricNames);
       }
@@ -382,10 +415,11 @@ class DeviceHistoryService {
             d.device_type,
             d.shelly_device_id,
             d.created_at,
+            d.user_id,
             u.cups as user_cups,
             u.name as user_name
           FROM devices d
-          JOIN users u ON d.user_id::uuid = u.id
+          LEFT JOIN users u ON (d.user_id != 'not_assigned' AND d.user_id::uuid = u.id)
           WHERE d.id = $1::uuid
           LIMIT 1
         `;
@@ -411,8 +445,9 @@ class DeviceHistoryService {
         
         if (config[generatorKey] && config[generatorKey].active) {
           // Crear objeto virtual del generador
+          // IMPORTANTE: Para generadores, el ID en la BD es CON prefijo (ej: "gen-giravolt")
           const deviceInfo = {
-            id: `gen-${generatorKey}`, // Agregar prefijo gen- para coincidir con la BD
+            id: `gen-${generatorKey}`, // CON prefijo para que coincida con la BD
             device_name: config[generatorKey].name,
             device_type: 'GENERATOR',
             shelly_device_id: deviceId,
@@ -422,13 +457,16 @@ class DeviceHistoryService {
             mqtt_topic: config[generatorKey].mqtt_topic
           };
           
-          // Cachear el resultado
-          this.deviceCache.set(deviceId, deviceInfo);
+          // Cachear el resultado usando múltiples claves para máxima compatibilidad
+          this.deviceCache.set(deviceId, deviceInfo);           // "giravolt" -> deviceInfo
+          this.deviceCache.set(generatorKey, deviceInfo);       // "giravolt" -> deviceInfo (por si acaso)
+          this.deviceCache.set(`gen-${generatorKey}`, deviceInfo); // "gen-giravolt" -> deviceInfo (compatibilidad)
           
           logger.debug('Dispositivo generador encontrado en YAML', {
             deviceId,
             generatorKey,
-            deviceName: deviceInfo.device_name
+            deviceName: deviceInfo.device_name,
+            realDeviceId: deviceInfo.id
           });
           
           return deviceInfo;

@@ -36,6 +36,7 @@ class AuthManager {
     async initializeGoogleAuth() {
         try {
             const clientId = this.getGoogleClientId();
+            console.log(">>>>>>>>>>>", clientId);
             if (!clientId) {
                 console.error('No se puede inicializar Google Auth: Client ID no disponible');
                 return;
@@ -69,6 +70,7 @@ class AuthManager {
 
     // Handle Google authentication response
     async handleGoogleResponse(response) {
+        console.log('Respuesta de Google recibida:', response);
         try {
             console.log('Procesando respuesta de Google...');
             const result = await this.loginWithGoogle(response.credential);

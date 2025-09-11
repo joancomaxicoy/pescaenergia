@@ -18,6 +18,7 @@ const frontendRoutes = require('./routes/frontend');
 const generatorRoutes = require('./routes/generators');
 const userParticipationRoutes = require('./routes/userParticipation');
 const dashboardRoutes = require('./routes/dashboard');
+const adminRoutes = require('./routes/admin');
 
 class ExpressApp {
   constructor() {
@@ -73,10 +74,19 @@ class ExpressApp {
       }
     }));
     
-    // CORS
+    // CORS - Configuración para Google Sign-In
     this.app.use(cors({
-      origin: process.env.FRONTEND_URL || 'http://localhost:3001',
-      credentials: true
+      origin: [
+        process.env.FRONTEND_URL || 'http://localhost:3000',
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'https://accounts.google.com',
+        'https://www.googleapis.com'
+      ],
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      optionsSuccessStatus: 200 // Para navegadores legacy
     }));
 
     // Compresión
@@ -305,6 +315,7 @@ class ExpressApp {
     this.app.use('/api/generators', generatorRoutes);
     this.app.use('/api/user-participation', userParticipationRoutes);
     this.app.use('/api/dashboard', dashboardRoutes);
+    this.app.use('/api/admin', adminRoutes);
 
     // Rutas del frontend (área de usuario)
     this.app.use('/area-usuari', frontendRoutes);

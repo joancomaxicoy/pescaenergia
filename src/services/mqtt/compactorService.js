@@ -1,9 +1,12 @@
 const logger = require('../../utils/logger');
+const DeviceStateService = require('./deviceStateService');
+const { classifyMetric, getDeviceTypeFromTopic } = require('../../config/device-metrics-config');
 
 class CompactorService {
   constructor(bufferService, persistenceService) {
     this.bufferService = bufferService;
     this.persistenceService = persistenceService;
+    this.deviceStateService = new DeviceStateService();
     
     // Configuración
     this.compactionInterval = 300000; // 5 minutos 
@@ -159,7 +162,7 @@ class CompactorService {
         }
 
         // Agregar métricas del dispositivo físico
-        const deviceAggregates = this.aggregateDeviceMetrics(deviceUuid, metrics, cycleStartTime);
+        const deviceAggregates = await this.aggregateDeviceMetrics(deviceUuid, metrics, cycleStartTime);
         aggregatedMetrics.push(...deviceAggregates);
         
         devicesProcessed++;
@@ -179,7 +182,7 @@ class CompactorService {
         });
 
         // Agregar métricas del generador
-        const generatorAggregates = this.aggregateDeviceMetrics(generatorUuid, metrics, cycleStartTime);
+        const generatorAggregates = await this.aggregateDeviceMetrics(generatorUuid, metrics, cycleStartTime);
         aggregatedMetrics.push(...generatorAggregates);
         
         devicesProcessed++;
@@ -223,47 +226,115 @@ class CompactorService {
   }
 
   /**
-   * Agrega las métricas de un dispositivo específico
+   * Agrega las métricas de un dispositivo específico con persistencia dual
    * @param {string} deviceUuid - UUID del dispositivo
    * @param {Array} metrics - Array de métricas del dispositivo
    * @param {number} cycleStartTime - Timestamp del inicio del ciclo
-   * @returns {Array} - Array de métricas agregadas
+   * @returns {Array} - Array de métricas agregadas para series temporales
    */
-  aggregateDeviceMetrics(deviceUuid, metrics, cycleStartTime) {
-    // Agrupar métricas por nombre
-    const metricGroups = new Map();
+  async aggregateDeviceMetrics(deviceUuid, metrics, cycleStartTime) {
+    if (metrics.length === 0) return [];
+
+    // Determinar el tipo de dispositivo basándose en el primer metric
+    const firstMetric = metrics[0];
+    const deviceType = firstMetric.deviceType;
     
+    // Separar métricas por tipo de persistencia
+    const timeSeriesMetrics = new Map();
+    const stateMetrics = [];
+    const ignoredMetrics = [];
+
     for (const metric of metrics) {
       const { metricName, value, unit } = metric;
       
-      // Validar que el valor sea numérico
-      if (typeof value !== 'number' || isNaN(value)) {
-        logger.debug('Valor no numérico omitido', { 
-          deviceUuid, 
-          metricName, 
-          value, 
-          type: typeof value 
-        });
-        continue;
-      }
+      // Clasificar la métrica según la configuración
+      const classification = classifyMetric(deviceType, metricName);
+      
+      switch (classification) {
+        case 'timeseries':
+          // Validar que el valor sea numérico para series temporales
+          if (typeof value !== 'number' || isNaN(value)) {
+            logger.debug('Valor no numérico omitido para serie temporal', { 
+              deviceUuid, 
+              metricName, 
+              value, 
+              type: typeof value 
+            });
+            continue;
+          }
 
-      if (!metricGroups.has(metricName)) {
-        metricGroups.set(metricName, {
-          values: [],
-          unit: unit,
-          count: 0
-        });
-      }
+          if (!timeSeriesMetrics.has(metricName)) {
+            timeSeriesMetrics.set(metricName, {
+              values: [],
+              unit: unit,
+              count: 0
+            });
+          }
 
-      metricGroups.get(metricName).values.push(value);
-      metricGroups.get(metricName).count++;
+          timeSeriesMetrics.get(metricName).values.push(value);
+          timeSeriesMetrics.get(metricName).count++;
+          break;
+
+        case 'state':
+          // Para estados, tomar el último valor recibido
+          stateMetrics.push({
+            stateName: metricName,
+            stateValue: value,
+            stateType: this.determineStateType(value),
+            unit: unit
+          });
+          break;
+
+        case 'ignored':
+          ignoredMetrics.push(metricName);
+          break;
+
+        case 'unknown':
+          logger.debug('Métrica desconocida, tratando como serie temporal por defecto', {
+            deviceUuid,
+            deviceType,
+            metricName,
+            value
+          });
+          
+          // Tratar como serie temporal por defecto si es numérica
+          if (typeof value === 'number' && !isNaN(value)) {
+            if (!timeSeriesMetrics.has(metricName)) {
+              timeSeriesMetrics.set(metricName, {
+                values: [],
+                unit: unit,
+                count: 0
+              });
+            }
+            timeSeriesMetrics.get(metricName).values.push(value);
+            timeSeriesMetrics.get(metricName).count++;
+          }
+          break;
+      }
     }
 
-    // Calcular agregados para cada grupo de métricas
+    // Procesar estados (solo si no es un generador sintético)
+    if (stateMetrics.length > 0 && !deviceUuid.startsWith('gen-')) {
+      try {
+        await this.deviceStateService.updateMultipleDeviceStates(deviceUuid, stateMetrics);
+        logger.debug('Estados de dispositivo actualizados', {
+          deviceUuid,
+          statesCount: stateMetrics.length
+        });
+      } catch (error) {
+        logger.error('Error actualizando estados de dispositivo', {
+          deviceUuid,
+          error: error.message,
+          statesCount: stateMetrics.length
+        });
+      }
+    }
+
+    // Procesar series temporales (calcular agregados)
     const aggregatedMetrics = [];
     const timestamp = new Date(Math.floor(cycleStartTime / 60000) * 60000); // Redondear al minuto
 
-    for (const [metricName, group] of metricGroups) {
+    for (const [metricName, group] of timeSeriesMetrics) {
       const { values, unit, count } = group;
       
       if (values.length === 0) continue;
@@ -311,7 +382,7 @@ class CompactorService {
         });
       }
 
-      logger.debug('Métrica agregada', {
+      logger.debug('Métrica de serie temporal agregada', {
         deviceUuid,
         metricName,
         originalCount: values.length,
@@ -321,7 +392,35 @@ class CompactorService {
       });
     }
 
+    // Log del resumen del procesamiento
+    logger.debug('Resumen de procesamiento de métricas', {
+      deviceUuid,
+      deviceType,
+      totalMetrics: metrics.length,
+      timeSeriesMetrics: timeSeriesMetrics.size,
+      stateMetrics: stateMetrics.length,
+      ignoredMetrics: ignoredMetrics.length,
+      aggregatedMetrics: aggregatedMetrics.length
+    });
+
     return aggregatedMetrics;
+  }
+
+  /**
+   * Determina el tipo de estado basándose en el valor
+   * @param {any} value - Valor del estado
+   * @returns {string} - 'boolean', 'numeric', 'string', o 'json'
+   */
+  determineStateType(value) {
+    if (typeof value === 'boolean') {
+      return 'boolean';
+    } else if (typeof value === 'number') {
+      return 'numeric';
+    } else if (typeof value === 'object' && value !== null) {
+      return 'json';
+    } else {
+      return 'string';
+    }
   }
 
   /**

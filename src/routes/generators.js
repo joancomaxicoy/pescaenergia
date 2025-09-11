@@ -561,6 +561,7 @@ router.get('/:generatorCode/metrics',
   handleValidationErrors,
   validateGenerator,
   asyncHandler(async (req, res) => {
+  
     const { generatorCode } = req.params;
     const { startDate, endDate, metrics, aggregation = '1h', limit = 1000 } = req.query;
 

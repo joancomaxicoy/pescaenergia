@@ -63,4 +63,7 @@ class Database {
 // Singleton instance
 const database = new Database();
 
+// Exportar tanto la instancia como una función para obtener el pool
 module.exports = database;
+module.exports.pool = database.pool; // Para compatibilidad inicial
+module.exports.getPool = () => database.pool; // Función para obtener el pool actual

@@ -252,20 +252,18 @@ class PersistenceService {
         additionalInfo 
       });
 
-      // Determinar el usuario para el dispositivo
-      let userId;
+      // Para dispositivos PLUG, siempre usar 'not_assigned'
+      // Solo los dispositivos CIRCUTOR (ConsumCups) necesitan asignación de usuario
+      let userId = 'not_assigned';
       
       if (deviceType === 'CIRCUTOR' && deviceId.startsWith('ES')) {
         // Para dispositivos CIRCUTOR, el deviceId es el CUPS
         userId = await this.findOrCreateUserByCups(deviceId);
-      } else {
-        // Para otros dispositivos, usar "not_assigned"
-        userId = 'not_assigned';
-      }
-
-      if (!userId) {
-        logger.error('No se pudo determinar usuario para el dispositivo', { deviceId, deviceType });
-        return null;
+        
+        if (!userId) {
+          logger.error('No se pudo determinar usuario para dispositivo CIRCUTOR', { deviceId, deviceType });
+          return null;
+        }
       }
 
       // Crear el dispositivo
@@ -393,8 +391,12 @@ class PersistenceService {
     switch (deviceType) {
       case 'CIRCUTOR':
         return `Contador ${deviceId}`;
-      case 'ACS':
-        return `ACS ${deviceId}`;
+      case 'PLUG':
+        // Para dispositivos PLUG, extraer el tipo del prefijo
+        if (deviceId.startsWith('acs/')) {
+          return `ACS ${deviceId.replace('acs/', '')}`;
+        }
+        return `Dispositivo ${deviceId}`;
       case 'ENERGY_GENERATOR':
         return additionalInfo.generatorName || `Generador ${deviceId}`;
       default:

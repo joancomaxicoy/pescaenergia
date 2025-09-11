@@ -1,5 +1,6 @@
 const logger = require('../../utils/logger');
 const configLoader = require('../../utils/configLoader');
+const { getDeviceTypeFromTopic, classifyMetric } = require('../../config/device-metrics-config');
 
 class NormalizerService {
   constructor() {
@@ -105,13 +106,19 @@ class NormalizerService {
         
         if (result) {
           this.stats.messagesNormalized++;
+          
+          // Clasificar métricas en estados y series temporales
+          const classifiedResult = this.classifyMetrics(result);
+          
           logger.debug('Mensaje normalizado (dinámico)', { 
             topic, 
             generatorId: dynamicParser.id,
             deviceId: result.deviceId,
-            metricsCount: result.metrics?.length || 0 
+            metricsCount: result.metrics?.length || 0,
+            stateMetrics: classifiedResult.stateMetrics.length,
+            timeSeriesMetrics: classifiedResult.timeSeriesMetrics.length
           });
-          return result;
+          return classifiedResult;
         } else {
           this.stats.messagesSkipped++;
           logger.debug('Mensaje omitido por parser dinámico', { topic, generator: dynamicParser.id });
@@ -132,12 +139,18 @@ class NormalizerService {
           
           if (result) {
             this.stats.messagesNormalized++;
+            
+            // Clasificar métricas en estados y series temporales
+            const classifiedResult = this.classifyMetrics(result);
+            
             logger.debug('Mensaje normalizado (estático)', { 
               topic, 
               deviceId: result.deviceId,
-              metricsCount: result.metrics?.length || 0 
+              metricsCount: result.metrics?.length || 0,
+              stateMetrics: classifiedResult.stateMetrics.length,
+              timeSeriesMetrics: classifiedResult.timeSeriesMetrics.length
             });
-            return result;
+            return classifiedResult;
           } else {
             this.stats.messagesSkipped++;
             logger.debug('Mensaje omitido por parser estático', { topic, parser: parserName });
@@ -286,6 +299,17 @@ class NormalizerService {
   }
 
   /**
+   * Verifica si un string es una dirección IP válida
+   * @param {string} str - String a verificar
+   * @returns {boolean}
+   */
+  isIpAddress(str) {
+    // Regex simple para IPv4
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    return ipv4Regex.test(str);
+  }
+
+  /**
    * Determina la unidad basándose en el nombre de la métrica y su valor
    */
   determineUnit(metricName, value) {
@@ -369,7 +393,8 @@ class NormalizerService {
   }
 
   /**
-   * Parser universal para ACS
+   * Parser universal para PLUGs (incluyendo ACS)
+   * Maneja tanto valores simples como JSONs complejos de status
    */
   parseAcs(match, payload, timestamp, fullTopic) {
     const [, acsPath] = match;
@@ -379,41 +404,117 @@ class NormalizerService {
       return null;
     }
 
-    const deviceId = pathParts[0];
+    // Para dispositivos PLUG, el deviceId debe incluir el prefijo completo
+    // Ejemplo: acs/ES0031446458360006JY0F/status/switch:0 -> deviceId = "acs/ES0031446458360006JY0F"
+    // El deviceId se construye desde el topic original, no del path parseado
+    const topicParts = fullTopic.split('/');
+    const deviceId = topicParts.length >= 2 ? `${topicParts[0]}/${topicParts[1]}` : topicParts[0];
     const subtopic = pathParts.slice(1).join('/');
     
-    let metricInfo;
+    // Determinar el tipo de dispositivo usando la nueva función
+    const deviceType = getDeviceTypeFromTopic(fullTopic);
+    
+    let metrics = [];
     
     try {
       // Intentar parsear como JSON primero
       const data = JSON.parse(payload);
-      metricInfo = {
-        name: subtopic.replace('/', '_'),
-        value: data,
-        unit: 'json'
-      };
+      
+      // Si es un JSON complejo (como el status de un PLUG), extraer métricas anidadas
+      if (typeof data === 'object' && data !== null) {
+        metrics = this.extractNestedMetrics(data, subtopic.replace(/\//g, '_'));
+      } else {
+        // JSON simple, tratar como una sola métrica
+        metrics.push({
+          name: subtopic.replace(/\//g, '_'),
+          value: data,
+          unit: this.determineUnit(subtopic, data)
+        });
+      }
     } catch (error) {
       // Si no es JSON, tratar como valor simple
       let value = payload;
       if (!isNaN(parseFloat(payload))) {
         value = parseFloat(payload);
       } else if (payload.toLowerCase() === 'true' || payload.toLowerCase() === 'false') {
-        value = payload.toLowerCase() === 'true' ? 1 : 0;
+        value = payload.toLowerCase() === 'true';
       }
       
-      metricInfo = {
-        name: subtopic.replace('/', '_'),
+      metrics.push({
+        name: subtopic.replace(/\//g, '_'),
         value: value,
         unit: this.determineUnit(subtopic, value)
-      };
+      });
+    }
+
+    if (metrics.length === 0) {
+      return null;
     }
 
     return {
       deviceId,
-      deviceType: 'ACS',
+      deviceType,
       timestamp: new Date(timestamp),
-      metrics: [metricInfo]
+      metrics
     };
+  }
+
+  /**
+   * Extrae métricas de objetos JSON anidados (para PLUGs)
+   * @param {Object} data - Objeto JSON a procesar
+   * @param {string} prefix - Prefijo para los nombres de métricas
+   * @returns {Array} - Array de métricas extraídas
+   */
+  extractNestedMetrics(data, prefix = '') {
+    const metrics = [];
+    
+    const processObject = (obj, currentPrefix) => {
+      for (const [key, value] of Object.entries(obj)) {
+        const metricName = currentPrefix ? `${currentPrefix}_${key}` : key;
+        
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          // Objeto anidado, procesar recursivamente
+          processObject(value, metricName);
+        } else if (Array.isArray(value)) {
+          // Array, procesar elementos si son primitivos
+          value.forEach((item, index) => {
+            if (typeof item !== 'object') {
+              metrics.push({
+                name: `${metricName}_${index}`,
+                value: item,
+                unit: this.determineUnit(`${metricName}_${index}`, item)
+              });
+            }
+          });
+        } else {
+          // Valor primitivo
+          let processedValue = value;
+          
+          // Convertir strings booleanos a boolean
+          if (typeof value === 'string') {
+            if (value.toLowerCase() === 'true') {
+              processedValue = true;
+            } else if (value.toLowerCase() === 'false') {
+              processedValue = false;
+            } else if (this.isIpAddress(value)) {
+              // Mantener direcciones IP como strings
+              processedValue = value;
+            } else if (!isNaN(parseFloat(value))) {
+              processedValue = parseFloat(value);
+            }
+          }
+          
+          metrics.push({
+            name: metricName,
+            value: processedValue,
+            unit: this.determineUnit(metricName, processedValue)
+          });
+        }
+      }
+    };
+    
+    processObject(data, prefix);
+    return metrics;
   }
 
   /**
@@ -470,6 +571,111 @@ class NormalizerService {
       });
       return null;
     }
+  }
+
+  /**
+   * Clasifica las métricas en estados y series temporales
+   * @param {Object} normalizedData - Datos normalizados del parser
+   * @returns {Object} - Objeto con stateMetrics y timeSeriesMetrics separados
+   */
+  classifyMetrics(normalizedData) {
+    const { deviceId, deviceType, timestamp, metrics, generatorName } = normalizedData;
+    
+    const stateMetrics = [];
+    const timeSeriesMetrics = [];
+    const ignoredMetrics = [];
+    
+    for (const metric of metrics) {
+      const { name: metricName, value, unit } = metric;
+      
+      // Clasificar la métrica según la configuración
+      const classification = classifyMetric(deviceType, metricName);
+      
+      switch (classification) {
+        case 'state':
+          stateMetrics.push({
+            metricName,
+            value,
+            unit,
+            deviceType
+          });
+          break;
+          
+        case 'timeseries':
+          // Solo agregar a series temporales si el valor es numérico
+          if (typeof value === 'number' && !isNaN(value)) {
+            timeSeriesMetrics.push({
+              metricName,
+              value,
+              unit,
+              deviceType
+            });
+          } else {
+            logger.debug('Valor no numérico omitido para serie temporal', { 
+              deviceId, 
+              metricName, 
+              value, 
+              type: typeof value 
+            });
+          }
+          break;
+          
+        case 'ignored':
+          ignoredMetrics.push(metricName);
+          break;
+          
+        case 'unknown':
+          // Para métricas desconocidas, decidir basándose en el tipo de valor
+          if (typeof value === 'number' && !isNaN(value)) {
+            timeSeriesMetrics.push({
+              metricName,
+              value,
+              unit,
+              deviceType
+            });
+            logger.debug('Métrica desconocida tratada como serie temporal', {
+              deviceId,
+              deviceType,
+              metricName,
+              value
+            });
+          } else {
+            stateMetrics.push({
+              metricName,
+              value,
+              unit,
+              deviceType
+            });
+            logger.debug('Métrica desconocida tratada como estado', {
+              deviceId,
+              deviceType,
+              metricName,
+              value
+            });
+          }
+          break;
+      }
+    }
+    
+    // Log del resumen de clasificación
+    if (ignoredMetrics.length > 0) {
+      logger.debug('Métricas ignoradas según configuración', {
+        deviceId,
+        deviceType,
+        ignoredMetrics
+      });
+    }
+    
+    return {
+      deviceId,
+      deviceType,
+      timestamp,
+      generatorName,
+      stateMetrics,
+      timeSeriesMetrics,
+      // Mantener métricas originales para compatibilidad
+      metrics
+    };
   }
 
   /**

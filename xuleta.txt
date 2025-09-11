@@ -5,6 +5,7 @@ https://mqtt-explorer.com/
 mosquitto_sub -h pescaenergia.darwindata.eu -p 1883 -u PescaEnergia -P 3n3r91a -t '#' -v
 
 
+ES0031446458360006JY0F <--- albert
 
 
 HOME

@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const { pool } = require('../utils/database');
+const { getPool } = require('../utils/database');
 const configLoader = require('../utils/configLoader');
 
 /**
@@ -32,7 +32,7 @@ const checkDeviceOwnership = async (userId, deviceId) => {
       AND (id::text = $2 OR shelly_device_id = $2)
     `;
     
-    const result = await pool.query(query, [userId, deviceId]);
+    const result = await getPool().query(query, [userId, deviceId]);
     return parseInt(result.rows[0].count) > 0;
   } catch (error) {
     logger.error('Error verificando ownership del dispositivo:', {
@@ -170,7 +170,7 @@ const getDeviceInfo = async (deviceId) => {
       WHERE d.id::text = $1 OR d.shelly_device_id = $1
     `;
     
-    const result = await pool.query(query, [deviceId]);
+    const result = await getPool().query(query, [deviceId]);
     return result.rows[0] || null;
   } catch (error) {
     logger.error('Error obteniendo información del dispositivo:', error);

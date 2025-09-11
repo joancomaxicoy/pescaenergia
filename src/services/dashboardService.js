@@ -1,11 +1,107 @@
 const UserParticipationService = require('./userParticipationService');
 const DeviceHistoryService = require('./deviceHistoryService');
 const logger = require('../utils/logger');
+const {
+  getDeviceTypeFromTopic,
+  getPowerMetrics,
+  getVoltageMetrics,
+  getFrequencyMetrics,
+  getMetricsByType,
+  getDeviceMetricsInfo
+} = require('../config/device-metrics-config');
 
 class DashboardService {
   constructor() {
     this.userParticipationService = new UserParticipationService();
     this.deviceHistoryService = new DeviceHistoryService();
+  }
+
+  /**
+   * Determina el tipo de dispositivo y obtiene las métricas apropiadas
+   * @param {string} deviceId - ID del dispositivo
+   * @param {string} deviceType - Tipo de dispositivo (opcional, si ya se conoce)
+   * @returns {Object} - Métricas organizadas por tipo
+   */
+  getDeviceMetrics(deviceId, deviceType = null) {
+    // Si no se proporciona el tipo, intentar determinarlo
+    if (!deviceType) {
+      // Para generadores, usar 'GENERATOR'
+      if (deviceId && typeof deviceId === 'string') {
+        deviceType = 'GENERATOR'; // Asumimos que es un generador por defecto en el dashboard
+      }
+    }
+
+    // Obtener todas las métricas para el tipo de dispositivo
+    const powerMetrics = getPowerMetrics(deviceType);
+    const voltageMetrics = getVoltageMetrics(deviceType);
+    const frequencyMetrics = getFrequencyMetrics(deviceType);
+
+    // Combinar todas las métricas en un array único
+    const allMetrics = [...powerMetrics, ...voltageMetrics, ...frequencyMetrics];
+
+    return {
+      deviceType,
+      allMetrics,
+      powerMetrics,
+      voltageMetrics,
+      frequencyMetrics
+    };
+  }
+
+  /**
+   * Normaliza las métricas dinámicamente basándose en el tipo de dispositivo
+   * @param {Object} metrics - Métricas brutas
+   * @param {string} deviceType - Tipo de dispositivo
+   * @returns {Object} - Métricas normalizadas
+   */
+  normalizeMetricsDynamic(metrics, deviceType = 'GENERATOR') {
+    const normalized = {};
+    
+    // Obtener las métricas configuradas para este tipo de dispositivo
+    const powerMetrics = getPowerMetrics(deviceType);
+    const voltageMetrics = getVoltageMetrics(deviceType);
+    const frequencyMetrics = getFrequencyMetrics(deviceType);
+
+    // Normalizar potencia - buscar en orden de prioridad
+    for (const powerMetric of powerMetrics) {
+      if (metrics[powerMetric] !== undefined) {
+        normalized.power = metrics[powerMetric];
+        break;
+      }
+      // También buscar versiones con _avg
+      if (metrics[`${powerMetric}_avg`] !== undefined) {
+        normalized.power = metrics[`${powerMetric}_avg`];
+        break;
+      }
+    }
+
+    // Normalizar voltaje - buscar en orden de prioridad
+    for (const voltageMetric of voltageMetrics) {
+      if (metrics[voltageMetric] !== undefined) {
+        normalized.voltage = metrics[voltageMetric];
+        break;
+      }
+      // También buscar versiones con _avg
+      if (metrics[`${voltageMetric}_avg`] !== undefined) {
+        normalized.voltage = metrics[`${voltageMetric}_avg`];
+        break;
+      }
+    }
+
+    // Normalizar frecuencia - buscar en orden de prioridad
+    for (const frequencyMetric of frequencyMetrics) {
+      if (metrics[frequencyMetric] !== undefined) {
+        normalized.frequency = metrics[frequencyMetric];
+        break;
+      }
+      // También buscar versiones con _avg
+      if (metrics[`${frequencyMetric}_avg`] !== undefined) {
+        normalized.frequency = metrics[`${frequencyMetric}_avg`];
+        break;
+      }
+    }
+
+    return normalized;
   }
 
   /**
@@ -36,14 +132,24 @@ class DashboardService {
             // Usar el generator_code como deviceId para el DeviceHistoryService
             const deviceId = generator.code;
             
+            // Obtener las métricas configuradas para generadores
+            const deviceMetrics = this.getDeviceMetrics(deviceId, 'GENERATOR');
+            
+            // Crear lista de métricas a buscar (incluyendo versiones con _avg)
+            const metricsToQuery = [];
+            deviceMetrics.allMetrics.forEach(metric => {
+              metricsToQuery.push(metric);
+              metricsToQuery.push(`${metric}_avg`);
+            });
+            
             // Obtener las métricas más recientes
             const metricsData = await this.deviceHistoryService.getLatestMetrics(
               deviceId,
-              ['power_generation_avg', 'voltage_avg', 'frequency_avg', 'power_avg', 'voltage', 'frequency']
+              metricsToQuery
             );
 
-            // Normalizar las métricas (diferentes nombres posibles)
-            const normalizedMetrics = this.normalizeMetrics(metricsData.metrics);
+            // Normalizar las métricas usando el método dinámico
+            const normalizedMetrics = this.normalizeMetricsDynamic(metricsData.metrics, 'GENERATOR');
 
             return {
               generatorCode: generator.code,
@@ -123,9 +229,9 @@ class DashboardService {
   normalizeMetrics(metrics) {
     const normalized = {};
 
-    // Potencia (priorizar power_generation_avg, luego power_avg, luego power)
-    if (metrics.power_generation_avg !== undefined) {
-      normalized.power = metrics.power_generation_avg;
+    // Potencia (priorizar potencia_circutor_avg, luego power_avg, luego power)
+    if (metrics.potencia_circutor_avg !== undefined) {
+      normalized.power = metrics.potencia_circutor_avg;
     } else if (metrics.power_avg !== undefined) {
       normalized.power = metrics.power_avg;
     } else if (metrics.power !== undefined) {
@@ -191,11 +297,18 @@ class DashboardService {
           throw new Error('Període no vàlid');
       }
 
-      // Obtener evolución de las métricas principales
+      // Obtener las métricas configuradas para generadores
+      const deviceMetrics = this.getDeviceMetrics(generatorCode, 'GENERATOR');
+      
+      // Obtener evolución de las métricas principales usando configuración dinámica
+      const powerMetric = deviceMetrics.powerMetrics[0] + '_avg'; // Usar la primera métrica de potencia con _avg
+      const voltageMetric = deviceMetrics.voltageMetrics[0] + '_avg'; // Usar la primera métrica de voltaje con _avg
+      const frequencyMetric = deviceMetrics.frequencyMetrics[0] + '_avg'; // Usar la primera métrica de frecuencia con _avg
+      
       const [powerEvolution, voltageEvolution, frequencyEvolution] = await Promise.allSettled([
-        this.deviceHistoryService.getMetricEvolution(generatorCode, 'power_generation_avg', startDate, endDate, aggregation),
-        this.deviceHistoryService.getMetricEvolution(generatorCode, 'voltage_avg', startDate, endDate, aggregation),
-        this.deviceHistoryService.getMetricEvolution(generatorCode, 'frequency_avg', startDate, endDate, aggregation)
+        this.deviceHistoryService.getMetricEvolution(generatorCode, powerMetric, startDate, endDate, aggregation),
+        this.deviceHistoryService.getMetricEvolution(generatorCode, voltageMetric, startDate, endDate, aggregation),
+        this.deviceHistoryService.getMetricEvolution(generatorCode, frequencyMetric, startDate, endDate, aggregation)
       ]);
 
       const result = {
@@ -288,10 +401,20 @@ class DashboardService {
       // 1. Datos de consumo para cada device del usuario
       if (userDevices && userDevices.length > 0) {
         for (const device of userDevices) {
+          // Determinar el tipo de dispositivo basándose en device_type
+          let deviceType = 'SHELLY_EM'; // Por defecto para dispositivos de usuario
+          if (device.device_type === 'PLUG') {
+            deviceType = 'PLUG';
+          }
+          
+          // Obtener las métricas de potencia configuradas para este tipo de dispositivo
+          const deviceMetrics = this.getDeviceMetrics(device.id, deviceType);
+          const powerMetric = deviceMetrics.powerMetrics[0] + '_avg'; // Usar la primera métrica de potencia con _avg
+          
           dataPromises.push(
             this.deviceHistoryService.getMetricEvolution(
               device.id, // Usar device_id en lugar de CUPS
-              'potencia_circutor_avg', 
+              powerMetric, 
               startDate, 
               endDate, 
               aggregation
@@ -323,10 +446,14 @@ class DashboardService {
       if (participations && participations.length > 0) {
         for (const participation of participations) {
           if (participation.generator_active) {
+            // Obtener las métricas de potencia configuradas para generadores
+            const deviceMetrics = this.getDeviceMetrics(participation.generator_code, 'GENERATOR');
+            const powerMetric = deviceMetrics.powerMetrics[0] + '_avg'; // Usar la primera métrica de potencia con _avg
+            
             dataPromises.push(
               this.deviceHistoryService.getMetricEvolution(
                 participation.generator_code,
-                'potenciaFotovoltaica_avg',
+                powerMetric,
                 startDate,
                 endDate,
                 aggregation
@@ -594,15 +721,15 @@ class DashboardService {
     switch (period) {
       case '24h':
         startDate.setHours(startDate.getHours() - 24);
-        aggregation = '1h';
+        aggregation = '30m';
         break;
       case '7d':
         startDate.setDate(startDate.getDate() - 7);
-        aggregation = '1h';
+        aggregation = '30m';
         break;
       case '30d':
         startDate.setDate(startDate.getDate() - 30);
-        aggregation = '1h';
+        aggregation = '30m';
         break;
       default:
         throw new Error('Període no vàlid');
