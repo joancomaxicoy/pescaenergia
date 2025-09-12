@@ -155,39 +155,73 @@ class DeviceHistoryService {
       const realDeviceId = deviceInfo.id; // UUID real del dispositivo
 
       // Construir consulta con agregación temporal usando funciones SQL estándar
-      // Convertir aggregation a segundos para date_trunc
-      const aggregationMap = {
-        '1m': '1 minute',
-        '5m': '5 minutes', 
-        '15m': '15 minutes',
-        '30m': '30 minutes',
-        '1h': '1 hour',
-        '2h': '2 hours',
-        '6h': '6 hours',
-        '12h': '12 hours',
-        '1d': '1 day',
-        '1w': '1 week',
-        '1M': '1 month'
-      };
+      // Para PostgreSQL date_trunc, necesitamos usar time_bucket de TimescaleDB para intervalos personalizados
+      let query;
       
-      const truncInterval = aggregationMap[aggregation] || '1 hour';
-      
-      const query = `
-        SELECT 
-          date_trunc('${truncInterval.split(' ')[1]}', timestamp) AS time_bucket,
-          AVG(value) as avg_value,
-          MIN(value) as min_value,
-          MAX(value) as max_value,
-          COUNT(value) as data_points
-        FROM energy_metrics 
-        WHERE device_id = $1 
-          AND metric_name = $2 
-          AND timestamp >= $3 
-          AND timestamp <= $4
-        GROUP BY time_bucket 
-        ORDER BY time_bucket ASC
-        ${limit ? `LIMIT $5` : ''}
-      `;
+      if (['1m', '5m', '15m', '30m'].includes(aggregation)) {
+        // Para minutos, usar time_bucket con intervalos específicos
+        const minutes = parseInt(aggregation.replace('m', ''));
+        query = `
+          SELECT 
+            time_bucket('${minutes} minutes', timestamp) AS time_bucket,
+            AVG(value) as avg_value,
+            MIN(value) as min_value,
+            MAX(value) as max_value,
+            COUNT(value) as data_points
+          FROM energy_metrics 
+          WHERE device_id = $1 
+            AND metric_name = $2 
+            AND timestamp >= $3 
+            AND timestamp <= $4
+          GROUP BY time_bucket 
+          ORDER BY time_bucket ASC
+          ${limit ? `LIMIT $5` : ''}
+        `;
+      } else if (['1h', '2h', '6h', '12h'].includes(aggregation)) {
+        // Para horas, usar time_bucket con intervalos específicos
+        const hours = parseInt(aggregation.replace('h', ''));
+        query = `
+          SELECT 
+            time_bucket('${hours} hours', timestamp) AS time_bucket,
+            AVG(value) as avg_value,
+            MIN(value) as min_value,
+            MAX(value) as max_value,
+            COUNT(value) as data_points
+          FROM energy_metrics 
+          WHERE device_id = $1 
+            AND metric_name = $2 
+            AND timestamp >= $3 
+            AND timestamp <= $4
+          GROUP BY time_bucket 
+          ORDER BY time_bucket ASC
+          ${limit ? `LIMIT $5` : ''}
+        `;
+      } else {
+        // Para días, semanas y meses, usar date_trunc estándar
+        const truncMap = {
+          '1d': 'day',
+          '1w': 'week', 
+          '1M': 'month'
+        };
+        const truncInterval = truncMap[aggregation] || 'hour';
+        
+        query = `
+          SELECT 
+            date_trunc('${truncInterval}', timestamp) AS time_bucket,
+            AVG(value) as avg_value,
+            MIN(value) as min_value,
+            MAX(value) as max_value,
+            COUNT(value) as data_points
+          FROM energy_metrics 
+          WHERE device_id = $1 
+            AND metric_name = $2 
+            AND timestamp >= $3 
+            AND timestamp <= $4
+          GROUP BY time_bucket 
+          ORDER BY time_bucket ASC
+          ${limit ? `LIMIT $5` : ''}
+        `;
+      }
 
       const params = [realDeviceId, metricName, start, end];
       if (limit) {
@@ -279,36 +313,64 @@ class DeviceHistoryService {
 
       const realDeviceId = deviceInfo.id; // UUID real del dispositivo
 
-      // Construir consulta con agregación temporal usando funciones SQL estándar
-      const aggregationMap = {
-        '1m': '1 minute',
-        '5m': '5 minutes', 
-        '15m': '15 minutes',
-        '30m': '30 minutes',
-        '1h': '1 hour',
-        '2h': '2 hours',
-        '6h': '6 hours',
-        '12h': '12 hours',
-        '1d': '1 day',
-        '1w': '1 week',
-        '1M': '1 month'
-      };
+      // Construir consulta con agregación temporal usando TimescaleDB time_bucket
+      let query;
       
-      const truncInterval = aggregationMap[aggregation] || '1 hour';
-      
-      let query = `
-        SELECT 
-          date_trunc('${truncInterval.split(' ')[1]}', timestamp) AS time_bucket,
-          metric_name,
-          AVG(value) as avg_value,
-          MIN(value) as min_value,
-          MAX(value) as max_value,
-          COUNT(value) as data_points
-        FROM energy_metrics 
-        WHERE device_id = $1 
-          AND timestamp >= $2 
-          AND timestamp <= $3
-      `;
+      if (['1m', '5m', '15m', '30m'].includes(aggregation)) {
+        // Para minutos, usar time_bucket con intervalos específicos
+        const minutes = parseInt(aggregation.replace('m', ''));
+        query = `
+          SELECT 
+            time_bucket('${minutes} minutes', timestamp) AS time_bucket,
+            metric_name,
+            AVG(value) as avg_value,
+            MIN(value) as min_value,
+            MAX(value) as max_value,
+            COUNT(value) as data_points
+          FROM energy_metrics 
+          WHERE device_id = $1 
+            AND timestamp >= $2 
+            AND timestamp <= $3
+        `;
+      } else if (['1h', '2h', '6h', '12h'].includes(aggregation)) {
+        // Para horas, usar time_bucket con intervalos específicos
+        const hours = parseInt(aggregation.replace('h', ''));
+        query = `
+          SELECT 
+            time_bucket('${hours} hours', timestamp) AS time_bucket,
+            metric_name,
+            AVG(value) as avg_value,
+            MIN(value) as min_value,
+            MAX(value) as max_value,
+            COUNT(value) as data_points
+          FROM energy_metrics 
+          WHERE device_id = $1 
+            AND timestamp >= $2 
+            AND timestamp <= $3
+        `;
+      } else {
+        // Para días, semanas y meses, usar date_trunc estándar
+        const truncMap = {
+          '1d': 'day',
+          '1w': 'week', 
+          '1M': 'month'
+        };
+        const truncInterval = truncMap[aggregation] || 'hour';
+        
+        query = `
+          SELECT 
+            date_trunc('${truncInterval}', timestamp) AS time_bucket,
+            metric_name,
+            AVG(value) as avg_value,
+            MIN(value) as min_value,
+            MAX(value) as max_value,
+            COUNT(value) as data_points
+          FROM energy_metrics 
+          WHERE device_id = $1 
+            AND timestamp >= $2 
+            AND timestamp <= $3
+        `;
+      }
 
       const params = [realDeviceId, start, end];
 
