@@ -2,11 +2,14 @@ require('dotenv').config();
 const logger = require('./utils/logger');
 const database = require('./utils/database');
 const MqttDataService = require('./services/mqtt/mqttDataService');
+const mqttServiceRegistry = require('./services/mqtt/mqttServiceRegistry');
+const AutomationTimerService = require('./services/automationTimerService');
 const ExpressApp = require('./app');
 
 class PescaEnergiaBackend {
   constructor() {
     this.mqttDataService = null;
+    this.automationTimerService = null;
     this.expressApp = null;
     this.isShuttingDown = false;
   }
@@ -23,6 +26,13 @@ class PescaEnergiaBackend {
       await this.mqttDataService.initialize();
       await this.mqttDataService.start();
 
+      // Registrar el servicio MQTT en el registry para acceso global
+      mqttServiceRegistry.register(this.mqttDataService);
+
+      // Inicializar el servicio de automatización
+      this.automationTimerService = new AutomationTimerService();
+      await this.automationTimerService.start();
+
       // Inicializar el servidor Express
       this.expressApp = new ExpressApp();
       await this.expressApp.start();
@@ -33,6 +43,7 @@ class PescaEnergiaBackend {
       logger.info('PescaEnergia Backend iniciado correctamente');
       logger.info('Servicios activos:');
       logger.info('- Servicio MQTT: Activo');
+      logger.info('- Servicio de Automatización: Activo');
       logger.info('- Servidor Express: Activo');
       logger.info('- Base de datos: Conectada');
       
@@ -107,6 +118,11 @@ class PescaEnergiaBackend {
         // Cerrar servidor Express
         if (this.expressApp) {
           await this.expressApp.stop();
+        }
+
+        // Cerrar servicio de automatización
+        if (this.automationTimerService) {
+          await this.automationTimerService.stop();
         }
 
         // Cerrar servicio de datos MQTT

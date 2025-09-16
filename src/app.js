@@ -19,6 +19,8 @@ const generatorRoutes = require('./routes/generators');
 const userParticipationRoutes = require('./routes/userParticipation');
 const dashboardRoutes = require('./routes/dashboard');
 const adminRoutes = require('./routes/admin');
+const plugsRoutes = require('./routes/plugs');
+const sseRoutes = require('./routes/sse');
 
 class ExpressApp {
   constructor() {
@@ -308,6 +310,32 @@ class ExpressApp {
       });
     });
 
+    // Ruta de health check para automatización (solo para desarrollo/debug)
+    this.app.get('/health/automation', async (req, res) => {
+      try {
+        // Esta ruta solo debería estar disponible en desarrollo
+        if (process.env.NODE_ENV === 'production') {
+          return res.status(404).json({ error: 'Endpoint no disponible en producción' });
+        }
+
+        // Acceder al servicio de automatización desde el backend principal
+        // Nota: Esto requeriría una referencia al backend principal
+        res.json({
+          status: 'automation-health-check-placeholder',
+          message: 'Endpoint de desarrollo para verificar estado de automatización',
+          timestamp: new Date().toISOString(),
+          intervalMinutes: parseInt(process.env.AUTOMATION_TIMMER_INTERVAL) || 5,
+          userTimezone: process.env.USERS_TIMEZONE || 'Europe/Madrid'
+        });
+      } catch (error) {
+        res.status(500).json({
+          status: 'error',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
     // Rutas de la API
     this.app.use('/api/auth', authRoutes);
     this.app.use('/api/devices', deviceHistoryRoutes);
@@ -316,6 +344,8 @@ class ExpressApp {
     this.app.use('/api/user-participation', userParticipationRoutes);
     this.app.use('/api/dashboard', dashboardRoutes);
     this.app.use('/api/admin', adminRoutes);
+    this.app.use('/api/plugs', plugsRoutes);
+    this.app.use('/api/sse', sseRoutes);
 
     // Rutas del frontend (área de usuario)
     this.app.use('/area-usuari', frontendRoutes);

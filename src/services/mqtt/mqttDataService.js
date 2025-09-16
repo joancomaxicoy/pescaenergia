@@ -177,13 +177,11 @@ class MqttDataService {
    * @param {Array} stateMetrics - Array de métricas de estado
    */
   async processStatesImmediately(deviceId, stateMetrics) {
-    // Resolver el UUID del dispositivo
-    let deviceUuid;
+    // Intentar resolver el UUID del dispositivo
+    let deviceUuid = await this.persistenceService.resolveDeviceId(deviceId);
     
-    try {
-      deviceUuid = await this.persistenceService.resolveDeviceId(deviceId);
-    } catch (error) {
-      // Si el dispositivo no existe, intentar crearlo automáticamente
+    // Si no existe, crearlo automáticamente
+    if (!deviceUuid) {
       logger.info('Dispositivo no encontrado para estados, creando automáticamente', { 
         deviceId,
         statesCount: stateMetrics.length
@@ -195,6 +193,12 @@ class MqttDataService {
       if (!deviceUuid) {
         throw new Error(`No se pudo crear dispositivo para estados: ${deviceId}`);
       }
+      
+      logger.info('Dispositivo creado exitosamente para estados', {
+        deviceId,
+        deviceUuid,
+        deviceType
+      });
     }
 
     // Preparar estados para DeviceStateService

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Button Toggle Demo - PescaEnergía</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', Arial, sans-serif;
+            background-color: #fdf1eb;
+            color: #333;
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #1b4444;
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 18px;
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .demo-section {
+            margin-bottom: 40px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .demo-title {
+            color: #1b4444;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .demo-description {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .demo-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-label {
+            font-weight: 500;
+            color: #1b4444;
+            font-size: 14px;
+        }
+
+        .control-input {
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .control-button {
+            padding: 8px 16px;
+            background: #fcbd25;
+            color: #1b4444;
+            border: none;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .control-button:hover {
+            background: #e6a820;
+            transform: translateY(-1px);
+        }
+
+        .demo-component {
+            margin: 20px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+        }
+
+        .event-log {
+            background: #1b4444;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .event-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .event-time {
+            color: #fcbd25;
+        }
+
+        .clear-log {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .clear-log:hover {
+            background: #c82333;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .demo-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .control-group {
+                justify-content: space-between;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Button Toggle Component Demo</h1>
+        <p class="subtitle">Componente genérico reutilizable para toggle de múltiples opciones</p>
+
+        <!-- Demo 1: Automatización -->
+        <div class="demo-section">
+            <h2 class="demo-title">1. Modo de Automatización</h2>
+            <p class="demo-description">
+                Ejemplo para la sección de automatización con tres opciones: Manual, Per potència, Per horari
+            </p>
+            
+            <div class="demo-component">
+                <button-toggle 
+                    id="automation-toggle"
+                    modes="Manual,Per potència,Per horari"
+                    mode="0">
+                </button-toggle>
+            </div>
+
+            <div class="demo-controls">
+                <div class="control-group">
+                    <span class="control-label">Modo:</span>
+                    <select id="automation-mode" class="control-input">
+                        <option value="0">Manual (0)</option>
+                        <option value="1">Per potència (1)</option>
+                        <option value="2">Per horari (2)</option>
+                    </select>
+                </div>
+                <button class="control-button" onclick="setAutomationMode()">Aplicar</button>
+                <button class="control-button" onclick="toggleAutomationDisabled()">Toggle Disabled</button>
+            </div>
+        </div>
+
+        <!-- Demo 2: Dashboard Períodos -->
+        <div class="demo-section">
+            <h2 class="demo-title">2. Períodos del Dashboard</h2>
+            <p class="demo-description">
+                Ejemplo para reemplazar los controles de período del dashboard: 24h, 7d, 30d
+            </p>
+            
+            <div class="demo-component">
+                <button-toggle 
+                    id="period-toggle"
+                    modes="24h,7d,30d"
+                    mode="0">
+                </button-toggle>
+            </div>
+
+            <div class="demo-controls">
+                <div class="control-group">
+                    <span class="control-label">Período:</span>
+                    <select id="period-mode" class="control-input">
+                        <option value="0">24h (0)</option>
+                        <option value="1">7d (1)</option>
+                        <option value="2">30d (2)</option>
+                    </select>
+                </div>
+                <button class="control-button" onclick="setPeriodMode()">Aplicar</button>
+                <button class="control-button" onclick="togglePeriodDisabled()">Toggle Disabled</button>
+            </div>
+        </div>
+
+        <!-- Demo 3: Personalizado -->
+        <div class="demo-section">
+            <h2 class="demo-title">3. Configuración Personalizada</h2>
+            <p class="demo-description">
+                Prueba el componente con opciones personalizadas
+            </p>
+            
+            <div class="demo-component">
+                <button-toggle 
+                    id="custom-toggle"
+                    modes="Opción A,Opción B,Opción C,Opción D"
+                    mode="0">
+                </button-toggle>
+            </div>
+
+            <div class="demo-controls">
+                <div class="control-group">
+                    <span class="control-label">Opciones:</span>
+                    <input type="text" id="custom-modes" class="control-input" 
+                           value="Opción A,Opción B,Opción C,Opción D" 
+                           placeholder="Separadas por comas">
+                </div>
+                <button class="control-button" onclick="updateCustomModes()">Actualizar</button>
+                <button class="control-button" onclick="toggleCustomDisabled()">Toggle Disabled</button>
+            </div>
+        </div>
+
+        <!-- Event Log -->
+        <div class="demo-section">
+            <h2 class="demo-title">Event Log</h2>
+            <p class="demo-description">
+                Registro de eventos emitidos por los componentes
+            </p>
+            
+            <div class="event-log" id="event-log">
+                <div class="event-entry">
+                    <span class="event-time">[Inicio]</span> Event log iniciado
+                </div>
+            </div>
+            <button class="clear-log" onclick="clearEventLog()">Limpiar Log</button>
+        </div>
+    </div>
+
+    <!-- Cargar el componente -->
+    <script src="/js/components/button-toggle.js"></script>
+
+    <script>
+        // Referencias a los componentes
+        const automationToggle = document.getElementById('automation-toggle');
+        const periodToggle = document.getElementById('period-toggle');
+        const customToggle = document.getElementById('custom-toggle');
+        const eventLog = document.getElementById('event-log');
+
+        // Event listeners para todos los componentes
+        function setupEventListeners() {
+            automationToggle.addEventListener('mode-change', (event) => {
+                logEvent('Automatización', event.detail);
+            });
+
+            periodToggle.addEventListener('mode-change', (event) => {
+                logEvent('Período', event.detail);
+            });
+
+            customToggle.addEventListener('mode-change', (event) => {
+                logEvent('Personalizado', event.detail);
+            });
+        }
+
+        // Función para registrar eventos
+        function logEvent(source, detail) {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'event-entry';
+            entry.innerHTML = `
+                <span class="event-time">[${timestamp}]</span> 
+                ${source}: ${detail.previousValue} → ${detail.value} (índice: ${detail.previousIndex} → ${detail.index})
+            `;
+            eventLog.appendChild(entry);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        // Funciones de control para Automatización
+        function setAutomationMode() {
+            const select = document.getElementById('automation-mode');
+            automationToggle.mode = parseInt(select.value);
+        }
+
+        function toggleAutomationDisabled() {
+            automationToggle.disabled = !automationToggle.disabled;
+        }
+
+        // Funciones de control para Período
+        function setPeriodMode() {
+            const select = document.getElementById('period-mode');
+            periodToggle.mode = parseInt(select.value);
+        }
+
+        function togglePeriodDisabled() {
+            periodToggle.disabled = !periodToggle.disabled;
+        }
+
+        // Funciones de control para Personalizado
+        function updateCustomModes() {
+            const input = document.getElementById('custom-modes');
+            customToggle.modes = input.value;
+        }
+
+        function toggleCustomDisabled() {
+            customToggle.disabled = !customToggle.disabled;
+        }
+
+        // Función para limpiar el log
+        function clearEventLog() {
+            eventLog.innerHTML = `
+                <div class="event-entry">
+                    <span class="event-time">[${new Date().toLocaleTimeString()}]</span> Event log limpiado
+                </div>
+            `;
+        }
+
+        // Inicializar cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+            
+            // Log inicial
+            logEvent('Sistema', {
+                value: 'Componentes inicializados',
+                previousValue: 'Cargando',
+                index: 'N/A',
+                previousIndex: 'N/A'
+            });
+        });
+    </script>
+</body>
+</html>

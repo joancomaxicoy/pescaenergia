@@ -13,10 +13,10 @@ class MqttService {
     
     // Topics estáticos que siempre se suscriben
     this.staticTopics = [
-      'shellies/#',           // TODOS los datos de dispositivos Shelly
-      'ConsumCups/+',         // Datos de consumo por CUPS
-      'acs/+/status/#',       // Estado de dispositivos ACS
-      'acs/+/events/rpc'      // Eventos RPC de dispositivos ACS
+      '#'
+      // 'shellies/#',           // TODOS los datos de dispositivos Shelly
+      // 'ConsumCups/+',         // Datos de consumo por CUPS
+      // '+/ES+/#'               // Cualquier prefijo + CUPS español (acs, endoll1, enchufe23, etc.)
     ];
     
     this.dynamicTopics = [];

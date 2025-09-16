@@ -177,6 +177,24 @@ router.get('/dashboard', checkAuthFromCookie, requireAuth, requireCups, (req, re
 });
 
 /**
+ * Página de Endolls
+ */
+router.get('/endolls', checkAuthFromCookie, requireAuth, requireCups, (req, res) => {
+    res.render('pages/endolls', {
+        title: 'Endolls',
+        layout: 'main',
+        showNavbar: true,
+        showFooter: true,
+        isEndolls: true,
+        user: req.user.userData,
+        additionalScripts: ['/js/endolls.js'],
+        helpers: {
+            formatDate: formatDate
+        }
+    });
+});
+
+/**
  * Página de verificación de email requerida
  */
 router.get('/verificar-email', checkAuthFromCookie, (req, res) => {

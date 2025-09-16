@@ -35,10 +35,10 @@ class NormalizerService {
       this.parseConsumCups.bind(this)
     );
 
-    // Control ACS - Cualquier estado
+    // Parser genérico para PLUGs - Cualquier prefijo + CUPS válido
     this.parsers.set(
-      /^acs\/(.+)$/,
-      this.parseAcs.bind(this)
+      /^([^\/]+)\/(ES[A-Z0-9]{20})(?:\/(.*))?$/i,
+      this.parseGenericPlug.bind(this)
     );
 
     logger.info('Parsers estáticos configurados', { 
@@ -515,6 +515,103 @@ class NormalizerService {
     
     processObject(data, prefix);
     return metrics;
+  }
+
+  /**
+   * Parser genérico para PLUGs - Cualquier prefijo + CUPS válido
+   * Maneja topics como: endoll1/ES0031446458360006JY0F/status/switch:0
+   */
+  parseGenericPlug(match, payload, timestamp, fullTopic) {
+    const [, prefix, cups, subtopic] = match;
+    
+    // Validar que el CUPS sea válido (ya validado por la regex, pero doble verificación)
+    if (!this.isValidCups(cups)) {
+      logger.debug('CUPS inválido en topic genérico', { fullTopic, cups });
+      return null;
+    }
+
+    // Construir el deviceId como prefijo/cups
+    const deviceId = `${prefix}/${cups}`;
+    
+    // Determinar el tipo de dispositivo (siempre PLUG para este parser)
+    const deviceType = 'PLUG';
+    
+    let metrics = [];
+    
+    if (!subtopic) {
+      // Topic sin subtopic (ej: endoll1/ES0031446458360006JY0F)
+      // Tratar el payload como información general del dispositivo
+      metrics.push({
+        name: 'device_info',
+        value: payload,
+        unit: this.determineUnit('device_info', payload)
+      });
+    } else {
+      // Topic con subtopic (ej: endoll1/ES0031446458360006JY0F/status/switch:0)
+      try {
+        // Intentar parsear como JSON primero
+        const data = JSON.parse(payload);
+        
+        // Si es un JSON complejo, extraer métricas anidadas
+        if (typeof data === 'object' && data !== null) {
+          metrics = this.extractNestedMetrics(data, subtopic.replace(/\//g, '_'));
+        } else {
+          // JSON simple, tratar como una sola métrica
+          metrics.push({
+            name: subtopic.replace(/\//g, '_'),
+            value: data,
+            unit: this.determineUnit(subtopic, data)
+          });
+        }
+      } catch (error) {
+        // Si no es JSON, tratar como valor simple
+        let value = payload;
+        if (!isNaN(parseFloat(payload))) {
+          value = parseFloat(payload);
+        } else if (payload.toLowerCase() === 'true' || payload.toLowerCase() === 'false') {
+          value = payload.toLowerCase() === 'true';
+        } else if (payload.toLowerCase() === 'on' || payload.toLowerCase() === 'off') {
+          value = payload.toLowerCase() === 'on';
+        }
+        
+        metrics.push({
+          name: subtopic.replace(/\//g, '_'),
+          value: value,
+          unit: this.determineUnit(subtopic, value)
+        });
+      }
+    }
+
+    if (metrics.length === 0) {
+      return null;
+    }
+
+    logger.debug('Mensaje parseado por parser genérico PLUG', {
+      fullTopic,
+      deviceId,
+      prefix,
+      cups,
+      subtopic,
+      metricsCount: metrics.length
+    });
+
+    return {
+      deviceId,
+      deviceType,
+      timestamp: new Date(timestamp),
+      metrics
+    };
+  }
+
+  /**
+   * Valida si un string es un CUPS español válido
+   * @param {string} cups - String a validar
+   * @returns {boolean}
+   */
+  isValidCups(cups) {
+    // CUPS español: ES + 20 caracteres alfanuméricos
+    // Formato real: ES + 20 caracteres (dígitos y letras)
+    return /^ES[A-Z0-9]{20}$/i.test(cups);
   }
 
   /**

@@ -42,9 +42,11 @@
                         Històric d'Energia
                     </h2>
                     <div class="chart-controls">
-                        <button class="period-btn active" data-period="24h">24h</button>
-                        <button class="period-btn" data-period="7d">7d</button>
-                        <button class="period-btn" data-period="30d">30d</button>
+                        <button-toggle 
+                            id="period-toggle"
+                            modes="24h,7d,30d"
+                            mode="0">
+                        </button-toggle>
                     </div>
                 </div>
                 <div class="chart-container">
@@ -73,27 +75,71 @@
 
             <div class="dashboard-stats">
                 <div class="stat-card">
-                    <div class="stat-icon"><i data-lucide="zap"></i></div>
+                    <div class="stat-icon"><i data-lucide="battery-charging"></i></div>
                     <div class="stat-content">
-                        <div class="stat-value" id="totalGenerators">-</div>
-                        <div class="stat-label">Generadors</div>
+                        <div class="stat-value" id="totalKwUtilized">-</div>
+                        <div class="stat-label">kW Aprofitats</div>
+                        <div class="stat-description">Total del període actual</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon"><i data-lucide="bar-chart-3"></i></div>
+                    <div class="stat-icon"><i data-lucide="zap-off"></i></div>
                     <div class="stat-content">
-                        <div class="stat-value" id="totalParticipation">-</div>
-                        <div class="stat-label">% Total</div>
+                        <div class="stat-value" id="totalKwWasted">-</div>
+                        <div class="stat-label">kW Perduts</div>
+                        <div class="stat-description">Total del període actual</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon"><i data-lucide="refresh-cw"></i></div>
+                    <div class="stat-icon"><i data-lucide="percent"></i></div>
                     <div class="stat-content">
-                        <div class="stat-value" id="lastUpdate">-</div>
-                        <div class="stat-label">Última actualització</div>
+                        <div class="stat-value" id="utilizationPercentage">-</div>
+                        <div class="stat-label">% Aprofitament</div>
+                        <div class="stat-description">Eficiència del període actual</div>
                     </div>
                 </div>
             </div>
+
+            <!-- Difference Chart Section -->
+            <div class="difference-chart-section">
+                <div class="chart-header">
+                    <h2 class="chart-title">
+                        <i data-lucide="bar-chart"></i>
+                        Aprofitament Energètic
+                    </h2>
+                    <div class="chart-controls">
+                        <button-toggle 
+                            id="difference-period-toggle"
+                            modes="24h,7d,30d"
+                            mode="0">
+                        </button-toggle>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div id="differenceChartLoading" class="chart-loading">
+                        <div class="loading-spinner"></div>
+                        <p>Carregant dades d'aprofitament...</p>
+                    </div>
+                    <div id="differenceChartError" class="chart-error" style="display: none;">
+                        <i data-lucide="alert-circle"></i>
+                        <p>Error carregant les dades d'aprofitament</p>
+                        <button class="btn btn-sm" onclick="loadHistoricalChart()">Tornar a intentar</button>
+                    </div>
+                    <canvas id="differenceChart" style="display: none;"></canvas>
+                </div>
+                <div class="chart-legend">
+                    <div class="legend-item solar">
+                        <span class="legend-color"></span>
+                        <span class="legend-label">Energia solar</span>
+                    </div>
+                    <div class="legend-item grid">
+                        <span class="legend-color"></span>
+                        <span class="legend-label">Energia de la xarxa</span>
+                    </div>
+                </div>
+            </div>
+
+            
 
             <div id="generatorsList" class="generators-list">
                 <!-- Los generadores se cargarán dinámicamente aquí -->
@@ -106,48 +152,5 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <!-- Lucide Icons -->
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-
-<!-- Profile Modal -->
-<div id="profileModal" class="modal modal-hidden">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Perfil d'usuari</h3>
-            <button class="modal-close" id="closeProfileBtn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <!-- Message container for success/error feedback -->
-            <div id="profileMessage" class="profile-message" style="display: none;">
-                <div class="message-content">
-                    <i class="message-icon" data-lucide="check-circle"></i>
-                    <span class="message-text"></span>
-                </div>
-            </div>
-
-            <form id="profileForm">
-                <div class="form-group">
-                    <label for="profileName" class="form-label">Nom</label>
-                    <input type="text" id="profileName" class="form-input" value="{{user.name}}" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="profileEmail" class="form-label">Correu electrònic</label>
-                    <input type="email" id="profileEmail" class="form-input" value="{{user.email}}" disabled>
-                    <small class="form-help">El correu electrònic no es pot modificar</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="profileCups" class="form-label">CUPS</label>
-                    <input type="text" id="profileCups" class="form-input" value="{{user.cups}}" disabled>
-                    <small class="form-help">Contacta amb suport per canviar el CUPS</small>
-                </div>
-                
-                <div class="form-group">
-                    <button type="submit" class="btn btn-primary">
-                        <span class="btn-text">Guardar canvis</span>
-                        <span class="loading loading-hidden" id="profileLoading"></span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+<!-- Button Toggle Component -->
+<script src="/js/components/button-toggle.js"></script>

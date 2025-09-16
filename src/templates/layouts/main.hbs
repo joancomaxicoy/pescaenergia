@@ -37,7 +37,58 @@
         </footer>
     {{/if}}
 
+    <!-- Profile Modal (global) -->
+    <div id="profileModal" class="modal modal-hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Perfil d'usuari</h3>
+                <button class="modal-close" id="closeProfileBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Message container for success/error feedback -->
+                <div id="profileMessage" class="profile-message" style="display: none;">
+                    <div class="message-content">
+                        <i class="message-icon" data-lucide="check-circle"></i>
+                        <span class="message-text"></span>
+                    </div>
+                </div>
+
+                <form id="profileForm">
+                    <div class="form-group">
+                        <label for="profileName" class="form-label">Nom</label>
+                        <input type="text" id="profileName" class="form-input" value="{{user.name}}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="profileEmail" class="form-label">Correu electrònic</label>
+                        <input type="email" id="profileEmail" class="form-input" value="{{user.email}}" disabled>
+                        <small class="form-help">El correu electrònic no es pot modificar</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="profileCups" class="form-label">CUPS</label>
+                        <input type="text" id="profileCups" class="form-input" value="{{user.cups}}" disabled>
+                        <small class="form-help">Contacta amb suport per canviar el CUPS</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary">
+                            <span class="btn-text">Guardar canvis</span>
+                            <span class="loading loading-hidden" id="profileLoading"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Módulos comunes (orden importante) -->
+    <script src="/js/api-client.js"></script>
+    <script src="/js/ui-utils.js"></script>
+    <script src="/js/dashboard-base.js"></script>
+    <script src="/js/profile.js"></script>
     <script src="/js/auth.js"></script>
+    
     {{#if additionalScripts}}
         {{#each additionalScripts}}
             <script src="{{this}}"></script>

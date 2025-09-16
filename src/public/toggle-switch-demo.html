@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toggle Switch Demo - PescaEnergía</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', Arial, sans-serif;
+            background-color: #fdf1eb;
+            color: #333;
+            line-height: 1.6;
+            letter-spacing: -0.8px;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .demo-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .demo-title {
+            color: #1b4444;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            letter-spacing: -1.5px;
+        }
+
+        .demo-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .demo-item:last-child {
+            border-bottom: none;
+        }
+
+        .demo-label {
+            font-weight: 500;
+            color: #1b4444;
+        }
+
+        .demo-description {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .demo-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .btn-primary {
+            background-color: #fcbd25;
+            color: #1b4444;
+        }
+
+        .btn-primary:hover {
+            background-color: #e6a820;
+        }
+
+        .btn-secondary {
+            background-color: #1b4444;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #0f2f2f;
+        }
+
+        .status-display {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .status-on {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-off {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-loading {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .status-disabled {
+            background-color: #e9ecef;
+            color: #6c757d;
+        }
+
+        .code-example {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #1b4444;
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            letter-spacing: -1.5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Toggle Switch Component Demo</h1>
+            <p>Componente reutilizable con Shadow DOM - Tamaños normal y mini</p>
+        </div>
+
+        <!-- Tamaño Normal -->
+        <div class="demo-section">
+            <h2 class="demo-title">Tamaño Normal (50x24px)</h2>
+            
+            <div class="demo-item">
+                <div>
+                    <div class="demo-label">Switch básico</div>
+                    <div class="demo-description">Estado normal, habilitado</div>
+                </div>
+                <div class="demo-controls">
+                    <span id="status-normal-1" class="status-display status-off">OFF</span>
+                    <toggle-switch id="switch-normal-1"></toggle-switch>
+                </div>
+            </div>
+
+            <div class="demo-item">
+                <div>
+                    <div class="demo-label">Switch con estado inicial ON</div>
+                    <div class="demo-description">Iniciado en estado encendido</div>
+                </div>
+                <div class="demo-controls">
+                    <span id="status-normal-2" class="status-display status-on">ON</span>
+                    <toggle-switch id="switch-normal-2" checked></toggle-switch>
+                </div>
+            </div>
+
+            <div class="demo-item">
+                <div>
+                    <div class="demo-label">Switch deshabilitado</div>
+                    <div class="demo-description">No se puede interactuar</div>
+                </div>
+                <div class="demo-controls">
+                    <span id="status-normal-3" class="status-display status-disabled">DISABLED</span>
+                    <toggle-switch id="switch-normal-3" disabled></toggle-switch>
+                    <button class="btn btn-secondary" onclick="toggleDisabled('switch-normal-3', 'status-normal-3')">Toggle Disabled</button>
+                </div>
+            </div>
+
+            <div class="demo-item">
+                <div>
+                    <div class="demo-label">Switch en estado loading</div>
+                    <div class="demo-description">Mostrando animación de carga</div>
+                </div>
+                <div class="demo-controls">
+                    <span id="status-normal-4" class="status-display status-loading">LOADING</span>
+                    <toggle-switch id="switch-normal-4" loading></toggle-switch>
+                    <button class="btn btn-primary" onclick="toggleLoading('switch-normal-4', 'status-normal-4')">Toggle Loading</button>
+                </div>
+            </div>
+
+            <div class="code-example">
+&lt;!-- Uso básico --&gt;
+&lt;toggle-switch&gt;&lt;/toggle-switch&gt;
+
+&lt;!-- Con estado inicial --&gt;
+&lt;toggle-switch checked&gt;&lt;/toggle-switch&gt;
+
+&lt;!-- Deshabilitado --&gt;
+&lt;toggle-switch disabled&gt;&lt;/toggle-switch&gt;
+
+&lt;!-- En estado loading --&gt;
+&lt;toggle-switch loading&gt;&lt;/toggle-switch&gt;
+            </div>
+        </div>
+
+        <!-- Tamaño Mini -->
+        <div class="demo-section">
+            <h2 class="demo-title">Tamaño Mini (32x16px)</h2>
+            
+            <div class="demo-item">
+                <div>
+                    <div class="demo-label">Switch mini básico</div>
+                    <div class="demo-description">Versión compacta para espacios reducidos</div>
+                </div>
+                <div class="demo-controls">
+                    <span id="status-mini-1" class="status-display status-off">OFF</span>
+                    <toggle-switch id="switch-mini-1" size="mini"></toggle-switch>
+                </div>
+            </div>
+
+            <div class="demo-item">
+                <div>
+                    <div class="demo-label">Switch mini con estado inicial ON</div>
+                    <div class="demo-description">Versión mini iniciada en estado encendido</div>
+                </div>
+                <div class="demo-controls">

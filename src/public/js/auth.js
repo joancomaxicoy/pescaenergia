@@ -36,7 +36,6 @@ class AuthManager {
     async initializeGoogleAuth() {
         try {
             const clientId = this.getGoogleClientId();
-            console.log(">>>>>>>>>>>", clientId);
             if (!clientId) {
                 console.error('No se puede inicializar Google Auth: Client ID no disponible');
                 return;

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Slot Selector Demo - PescaEnergía</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', Arial, sans-serif;
+            background-color: #fdf1eb;
+            color: #333;
+            line-height: 1.6;
+            letter-spacing: -0.8px;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #1b4444;
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            letter-spacing: -1.5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .demo-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .demo-title {
+            color: #1b4444;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            letter-spacing: -1px;
+        }
+
+        .demo-description {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .time-slots-container {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        .table-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: #1b4444;
+            color: white;
+            border-radius: 8px 8px 0 0;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: -0.5px;
+        }
+
+        .table-header .days-header {
+            display: flex;
+            gap: 12px;
+            flex: 1;
+            align-items: center;
+        }
+
+        .table-header .day-header {
+            min-width: 24px;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .table-header .time-header {
+            margin-left: 32px;
+        }
+
+        .table-body {
+            background: white;
+            border-radius: 0 0 8px 8px;
+            border: 1px solid #e9ecef;
+            border-top: none;
+            padding: 10px;
+        }
+
+        .event-log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .event-item {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 4px;
+        }
+
+        .event-changed {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .event-cleared {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .btn-primary {
+            background-color: #fcbd25;
+            color: #1b4444;
+        }
+
+        .btn-primary:hover {
+            background-color: #e6a820;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: #1b4444;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #0f2f2f;
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+            transform: translateY(-1px);
+        }
+
+        .data-display {
+            background: #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 10px;
+            }
+
+            .demo-section {
+                padding: 20px;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Time Slot Selector Demo</h1>
+            <p>Demostració del component de selecció de franges horàries</p>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="demo-title">Exemple d'ús bàsic</h2>
+            <p class="demo-description">
+                Feu clic a les files per configurar franges horàries. Cada fila funciona com un botó transparent que obre un modal per seleccionar dies i hores.
+            </p>
+
+            <div class="time-slots-container">
+                <div class="table-header">
+                    <div class="days-header">
+                        <div class="day-header">Dl</div>
+                        <div class="day-header">Dm</div>
+                        <div class="day-header">Dx</div>
+                        <div class="day-header">Dj</div>
+                        <div class="day-header">Dv</div>
+                        <div class="day-header">Ds</div>
+                        <div class="day-header">Dg</div>
+                    </div>
+                    <div class="time-header">Franja horària</div>
+                </div>
+                <div class="table-body">
+                    <time-slot-selector id="slot1"></time-slot-selector>
+                    <time-slot-selector id="slot2"></time-slot-selector>
+                    <time-slot-selector id="slot3"></time-slot-selector>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="demo-title">Controls programàtics</h2>
+            <p class="demo-description">
+                Proveu els mètodes públics del component per establir valors programàticament.
+            </p>
+
+            <div class="controls">
+                <button class="btn btn-primary" onclick="setExampleData()">Establir dades d'exemple</button>
+                <button class="btn btn-secondary" onclick="getAllData()">Obtenir totes les dades</button>
+                <button class="btn btn-danger" onclick="clearAllSlots()">Esborrar tot</button>
+            </div>
+
+            <div class="data-display" id="dataDisplay">
+                Les dades apareixeran aquí...
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="demo-title">Log d'esdeveniments</h2>
+            <p class="demo-description">
+                Esdeveniments emesos pels components quan es modifiquen les franges horàries.
+            </p>
+
+            <div class="event-log" id="eventLog">
+                Esperant esdeveniments...
+            </div>
+        </div>
+    </div>
+
+    <!-- Carregar el component -->
+    <script src="js/components/time-slot-selector.js"></script>
+
+    <script>
+        // Event listeners per capturar esdeveniments dels components
+        document.addEventListener('time-slot-changed', function(event) {
+            logEvent('CHANGED', event.detail);
+        });
+
+        document.addEventListener('time-slot-cleared', function(event) {
+            logEvent('CLEARED', event.detail);
+        });
+
+        function logEvent(type, detail) {
+            const eventLog = document.getElementById('eventLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const eventItem = document.createElement('div');
+            eventItem.className = `event-item event-${type.toLowerCase()}`;
+            
+            let message = `[${timestamp}] ${type}: `;
+            if (type === 'CHANGED') {
+                const dayLabels = detail.dayLabels.join(', ');
+                message += `Dies: ${dayLabels}, Hora: ${detail.startTime} - ${detail.endTime}`;
+            } else if (type === 'CLEARED') {
+                message += 'Franja esborrada';
+            }
+            
+            eventItem.textContent = message;
+            eventLog.appendChild(eventItem);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        // Funcions de control programàtic
+        function setExampleData() {
+            const slot1 = document.getElementById('slot1');
+            const slot2 = document.getElementById('slot2');
+            const slot3 = document.getElementById('slot3');
+
+            // Exemple 1: Dilluns a Divendres, 18:00 - 23:00
+            slot1.setTimeSlotData({
+                selectedDays: [0, 1, 2, 3, 4], // Dl, Dm, Dx, Dj, Dv
+                startTime: '18:00',
+                endTime: '23:00'
+            });
+
+            // Exemple 2: Dilluns a Dimecres, 12:00 - 15:00
+            slot2.setTimeSlotData({
+                selectedDays: [0, 1, 2], // Dl, Dm, Dx
+                startTime: '12:00',
+                endTime: '15:00'
+            });
+
+            // Exemple 3: Dissabte i Diumenge, 10:00 - 21:00
+            slot3.setTimeSlotData({
+                selectedDays: [5, 6], // Ds, Dg
+                startTime: '10:00',
+                endTime: '21:00'
+            });
+
+            updateDataDisplay();
+        }
+
+        function getAllData() {
+            updateDataDisplay();
+        }
+
+        function clearAllSlots() {
+            const slots = document.querySelectorAll('time-slot-selector');
+            slots.forEach(slot => slot.clearTimeSlot());
+            updateDataDisplay();
+        }
+
+        function updateDataDisplay() {
+            const dataDisplay = document.getElementById('dataDisplay');
+            const slots = document.querySelectorAll('time-slot-selector');
+            
+            let data = 'Dades actuals dels components:\n\n';
+            
+            slots.forEach((slot, index) => {
+                const slotData = slot.getTimeSlotData();
+                data += `Slot ${index + 1} (${slot.id}):\n`;
+                data += `  Dies seleccionats: ${slotData.dayLabels.join(', ') || 'Cap'}\n`;
+                data += `  Franja horària: ${slotData.startTime && slotData.endTime ? `${slotData.startTime} - ${slotData.endTime}` : 'No configurada'}\n`;
+                data += `  Té dades: ${slotData.hasData ? 'Sí' : 'No'}\n\n`;
+            });
+            
+            dataDisplay.textContent = data;
+        }
+
+        // Actualitzar display inicial
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDataDisplay();
+        });
+    </script>
+</body>
+</html>

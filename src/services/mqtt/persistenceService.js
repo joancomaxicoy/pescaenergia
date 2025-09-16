@@ -399,8 +399,17 @@ class PersistenceService {
         return `Dispositivo ${deviceId}`;
       case 'ENERGY_GENERATOR':
         return additionalInfo.generatorName || `Generador ${deviceId}`;
+      // Manejar tipos de dispositivos Shelly específicos
+      case 'SHELLY_EM':
+      case 'SHELLY_SHELLYEM':
+        return `Shelly EM ${deviceId}`;
+      case 'SHELLY_PLUSPLUGS':
+        return `Shelly Plug ${deviceId}`;
       default:
-        if (deviceId.startsWith('shelly')) {
+        // Para cualquier dispositivo que empiece con un prefijo conocido
+        if (deviceId.startsWith('acs/')) {
+          return `ACS ${deviceId.replace('acs/', '')}`;
+        } else if (deviceId.startsWith('shelly')) {
           return `Dispositivo Shelly ${deviceId}`;
         }
         return `Dispositivo ${deviceId}`;

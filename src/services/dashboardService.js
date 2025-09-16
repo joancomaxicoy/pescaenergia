@@ -578,6 +578,45 @@ class DashboardService {
         }
       });
 
+      // Calcular dataset de diferencia (consumo - generación) para la gráfica separada
+      const differenceData = sortedTimestamps.map(timestamp => {
+        // Sumar todo el consumo en este timestamp
+        const totalConsumption = datasets
+          .filter(d => d.type === 'consumption')
+          .reduce((sum, dataset) => {
+            const index = sortedTimestamps.indexOf(timestamp);
+            const value = dataset.data[index];
+            return sum + (value || 0);
+          }, 0);
+
+        // Sumar toda la generación en este timestamp
+        const totalGeneration = datasets
+          .filter(d => d.type === 'generation')
+          .reduce((sum, dataset) => {
+            const index = sortedTimestamps.indexOf(timestamp);
+            const value = dataset.data[index];
+            return sum + (value || 0);
+          }, 0);
+
+        // Calcular diferencia: positivo = energía de la red, negativo = energía perdida
+        const difference = totalConsumption - totalGeneration;
+        
+        // Solo retornar valor si hay datos de consumo o generación
+        return (totalConsumption > 0 || totalGeneration > 0) ? difference : null;
+      });
+
+      // Añadir dataset de diferencia (solo para la gráfica de barras, no se mostrará en la línea)
+      datasets.push({
+        label: 'Diferència (Consum - Generació)',
+        data: differenceData,
+        borderColor: '#fcbd25',
+        backgroundColor: 'rgba(252, 189, 37, 0.1)',
+        fill: false,
+        tension: 0.1,
+        type: 'difference',
+        hidden: true // Oculto en la gráfica principal de líneas
+      });
+
       // Formatear labels para mostrar en Europe/Madrid
       const labels = sortedTimestamps.map(timestamp => {
         const date = new Date(timestamp);

@@ -1,6 +1,7 @@
 const logger = require('../utils/logger');
 const database = require('../utils/database');
 const configLoader = require('../utils/configLoader');
+const mqttServiceRegistry = require('./mqtt/mqttServiceRegistry');
 
 class DeviceHistoryService {
   constructor() {
@@ -30,7 +31,8 @@ class DeviceHistoryService {
   }
 
   /**
-   * Obtiene las métricas más recientes para un dispositivo
+   * Obtiene las métricas más recientes para un dispositivo (NUEVA LÓGICA HÍBRIDA)
+   * Busca primero en el buffer MQTT y luego en la base de datos
    * @param {string} deviceId - UUID del dispositivo o shelly_device_id
    * @param {Array<string>} metricNames - Nombres específicos de métricas (opcional)
    * @returns {Object} - Objeto con las métricas más recientes
@@ -50,8 +52,122 @@ class DeviceHistoryService {
         throw new Error(`Dispositiu amb ID ${deviceId} no trobat`);
       }
 
-      const realDeviceId = deviceInfo.id; // UUID real del dispositivo
+      // PASO 1: Intentar obtener datos del buffer MQTT (datos más frescos)
+      const bufferMetrics = await this.getLatestMetricsFromBuffer(deviceId, metricNames);
+      
+      // PASO 2: Obtener datos de la base de datos (datos persistidos)
+      const dbMetrics = await this.getLatestMetricsFromDatabase(deviceInfo.id, metricNames);
 
+      // PASO 3: Combinar resultados priorizando datos del buffer
+      const combinedMetrics = this.combineBufferAndDbMetrics(bufferMetrics, dbMetrics, metricNames);
+
+      // Actualizar estadísticas
+      const queryTime = Date.now() - startTime;
+      this.updateStats('latest', queryTime);
+
+      logger.info('Métricas más recientes obtenidas (híbrido)', {
+        deviceId,
+        metricsCount: combinedMetrics.totalMetrics,
+        queryTime,
+        requestedMetrics: metricNames,
+        bufferMetrics: bufferMetrics ? bufferMetrics.totalMetrics : 0,
+        dbMetrics: dbMetrics ? dbMetrics.totalMetrics : 0,
+        sources: combinedMetrics.sources
+      });
+
+      return combinedMetrics;
+
+    } catch (error) {
+      this.stats.totalErrors++;
+      logger.error('Error obteniendo métricas más recientes:', {
+        deviceId,
+        metricNames,
+        error: error.message,
+        queryTime: Date.now() - startTime
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene las métricas más recientes desde el buffer MQTT
+   * @param {string} deviceId - ID del dispositivo (puede ser shelly_device_id)
+   * @param {Array<string>} metricNames - Nombres específicos de métricas (opcional)
+   * @returns {Object|null} - Métricas del buffer o null si no hay datos
+   */
+  async getLatestMetricsFromBuffer(deviceId, metricNames = null) {
+    try {
+      // Verificar si el registry MQTT está disponible
+      if (!mqttServiceRegistry.isAvailable()) {
+        logger.debug('Registry MQTT no disponible, omitiendo consulta al buffer', { deviceId });
+        return null;
+      }
+
+      // Mapear métricas agregadas a métricas raw para buscar en buffer
+      const rawMetricNames = metricNames ? this.mapAggregatedToRawMetrics(metricNames) : null;
+
+      // Obtener datos del buffer usando el deviceId original (shelly_device_id)
+      const bufferData = mqttServiceRegistry.getLatestBufferMetricsForDevice(deviceId, rawMetricNames);
+      
+      if (!bufferData) {
+        logger.debug('No hay datos en buffer para dispositivo', { deviceId, rawMetricNames });
+        return null;
+      }
+
+      // Si se pidieron métricas específicas agregadas, mapear las respuestas
+      if (metricNames && metricNames.length > 0) {
+        const mappedMetrics = {};
+        
+        for (const requestedMetric of metricNames) {
+          const rawMetric = this.getRawMetricName(requestedMetric);
+          
+          if (bufferData.metrics[rawMetric] !== undefined) {
+            // Si tenemos el valor raw, usarlo para todas las variantes agregadas
+            mappedMetrics[requestedMetric] = bufferData.metrics[rawMetric];
+            
+            logger.debug('Métrica mapeada desde buffer', {
+              requested: requestedMetric,
+              raw: rawMetric,
+              value: bufferData.metrics[rawMetric]
+            });
+          }
+        }
+
+        if (Object.keys(mappedMetrics).length > 0) {
+          return {
+            ...bufferData,
+            metrics: mappedMetrics,
+            totalMetrics: Object.keys(mappedMetrics).length
+          };
+        }
+      }
+
+      logger.debug('Datos obtenidos del buffer', {
+        deviceId,
+        metricsCount: bufferData.totalMetrics,
+        timestamp: bufferData.timestamp
+      });
+
+      return bufferData;
+
+    } catch (error) {
+      logger.error('Error obteniendo métricas del buffer:', {
+        deviceId,
+        metricNames,
+        error: error.message
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene las métricas más recientes desde la base de datos
+   * @param {string} realDeviceId - UUID real del dispositivo
+   * @param {Array<string>} metricNames - Nombres específicos de métricas (opcional)
+   * @returns {Object|null} - Métricas de la BD o null si no hay datos
+   */
+  async getLatestMetricsFromDatabase(realDeviceId, metricNames = null) {
+    try {
       // Construir la consulta
       let query = `
         SELECT DISTINCT ON (metric_name) 
@@ -77,6 +193,10 @@ class DeviceHistoryService {
 
       const result = await database.query(query, params);
 
+      if (result.rows.length === 0) {
+        return null;
+      }
+
       // Procesar resultados
       const metrics = {};
       let latestTimestamp = null;
@@ -90,36 +210,116 @@ class DeviceHistoryService {
         }
       }
 
-      // Actualizar estadísticas
-      const queryTime = Date.now() - startTime;
-      this.updateStats('latest', queryTime);
-
-      const response = {
-        deviceId,
+      return {
+        deviceId: realDeviceId,
         timestamp: latestTimestamp,
         metrics,
-        totalMetrics: Object.keys(metrics).length
+        totalMetrics: Object.keys(metrics).length,
+        source: 'database'
       };
 
-      logger.info('Métricas más recientes obtenidas', {
-        deviceId,
-        metricsCount: response.totalMetrics,
-        queryTime,
-        requestedMetrics: metricNames
-      });
-
-      return response;
-
     } catch (error) {
-      this.stats.totalErrors++;
-      logger.error('Error obteniendo métricas más recientes:', {
-        deviceId,
+      logger.error('Error obteniendo métricas de la base de datos:', {
+        realDeviceId,
         metricNames,
-        error: error.message,
-        queryTime: Date.now() - startTime
+        error: error.message
       });
-      throw error;
+      return null;
     }
+  }
+
+  /**
+   * Combina métricas del buffer y de la base de datos, priorizando el buffer
+   * @param {Object|null} bufferMetrics - Métricas del buffer
+   * @param {Object|null} dbMetrics - Métricas de la base de datos
+   * @param {Array<string>} requestedMetrics - Métricas solicitadas originalmente
+   * @returns {Object} - Métricas combinadas
+   */
+  combineBufferAndDbMetrics(bufferMetrics, dbMetrics, requestedMetrics) {
+    const combinedMetrics = {};
+    let latestTimestamp = null;
+    const sources = { buffer: 0, database: 0 };
+
+    // Priorizar métricas del buffer
+    if (bufferMetrics && bufferMetrics.metrics) {
+      for (const [metricName, value] of Object.entries(bufferMetrics.metrics)) {
+        combinedMetrics[metricName] = value;
+        sources.buffer++;
+      }
+      
+      if (bufferMetrics.timestamp) {
+        latestTimestamp = bufferMetrics.timestamp;
+      }
+    }
+
+    // Añadir métricas de la BD que no estén en el buffer
+    if (dbMetrics && dbMetrics.metrics) {
+      for (const [metricName, value] of Object.entries(dbMetrics.metrics)) {
+        if (combinedMetrics[metricName] === undefined) {
+          combinedMetrics[metricName] = value;
+          sources.database++;
+        }
+      }
+      
+      // Usar timestamp de BD si no hay timestamp del buffer o si es más reciente
+      if (dbMetrics.timestamp && (!latestTimestamp || new Date(dbMetrics.timestamp) > new Date(latestTimestamp))) {
+        latestTimestamp = dbMetrics.timestamp;
+      }
+    }
+
+    // Si no hay datos en ninguna fuente
+    if (Object.keys(combinedMetrics).length === 0) {
+      return {
+        deviceId: bufferMetrics?.deviceId || dbMetrics?.deviceId || 'unknown',
+        timestamp: null,
+        metrics: {},
+        totalMetrics: 0,
+        sources
+      };
+    }
+
+    return {
+      deviceId: bufferMetrics?.deviceId || dbMetrics?.deviceId,
+      timestamp: latestTimestamp,
+      metrics: combinedMetrics,
+      totalMetrics: Object.keys(combinedMetrics).length,
+      sources
+    };
+  }
+
+  /**
+   * Mapea métricas agregadas a sus equivalentes raw para buscar en buffer
+   * @param {Array<string>} metricNames - Nombres de métricas agregadas
+   * @returns {Array<string>} - Nombres de métricas raw correspondientes
+   */
+  mapAggregatedToRawMetrics(metricNames) {
+    const rawMetrics = new Set();
+    
+    for (const metricName of metricNames) {
+      const rawMetric = this.getRawMetricName(metricName);
+      rawMetrics.add(rawMetric);
+    }
+    
+    return Array.from(rawMetrics);
+  }
+
+  /**
+   * Obtiene el nombre de la métrica raw a partir de una métrica agregada
+   * @param {string} aggregatedMetric - Nombre de métrica agregada (ej: "power_consumption_avg")
+   * @returns {string} - Nombre de métrica raw (ej: "power_consumption")
+   */
+  getRawMetricName(aggregatedMetric) {
+    // Sufijos de agregación conocidos
+    const aggregationSuffixes = ['_avg', '_min', '_max', '_sum', '_count'];
+    
+    for (const suffix of aggregationSuffixes) {
+      if (aggregatedMetric.endsWith(suffix)) {
+        return aggregatedMetric.slice(0, -suffix.length);
+      }
+    }
+    
+    // Si no tiene sufijo de agregación, devolver tal como está
+    return aggregatedMetric;
   }
 
   /**

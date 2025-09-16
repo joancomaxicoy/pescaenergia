@@ -5,54 +5,21 @@ console.log('Dashboard loaded');
 let dashboardData = null;
 let gaugeCharts = {};
 let historicalChart = null;
+let differenceChart = null;
 let currentPeriod = '24h';
-
-// Profile modal functions
-function showProfile() {
-    const modal = document.getElementById('profileModal');
-    if (modal) {
-        modal.classList.remove('modal-hidden');
-    }
-}
-
-function closeProfile() {
-    const modal = document.getElementById('profileModal');
-    if (modal) {
-        modal.classList.add('modal-hidden');
-    }
-}
-
-function getAuthToken() {
-    // Get token from cookie or localStorage
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-        const [name, value] = cookie.trim().split('=');
-        if (name === 'authToken') {
-            return value;
-        }
-    }
-    return localStorage.getItem('authToken');
-}
+let energyUtilizationData = {
+    totalKwUtilized: 0,
+    totalKwWasted: 0,
+    utilizationPercentage: 0
+};
 
 // Dashboard data loading
 async function loadDashboardData() {
     try {
         showLoading();
         
-        // First get user participations
-        const participationsResponse = await fetch('/api/dashboard/user-generators', {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${getAuthToken()}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const participationsData = await participationsResponse.json();
-
-        if (!participationsResponse.ok) {
-            throw new Error(participationsData.error || 'Error carregant les dades');
-        }
+        // First get user participations using the API client
+        const { data: participationsData } = await window.apiClient.get('/api/dashboard/user-generators');
 
         // Now get real-time metrics for each generator using public endpoints
         const generatorsWithMetrics = await Promise.all(
@@ -167,18 +134,9 @@ function renderStats(data) {
         const participation = parseFloat(gen.participationPercentage) || 0;
         return sum + participation;
     }, 0);
-    
-    // Find most recent update
-    const lastUpdate = data.generators
-        .filter(gen => gen.lastUpdate)
-        .map(gen => new Date(gen.lastUpdate))
-        .sort((a, b) => b - a)[0];
 
-    document.getElementById('totalGenerators').textContent = data.activeGenerators;
-    document.getElementById('totalParticipation').textContent = `${totalParticipation.toFixed(1)}%`;
-    document.getElementById('lastUpdate').textContent = lastUpdate 
-        ? formatRelativeTime(lastUpdate)
-        : 'Sense dades';
+    // Update the wasted energy (this will be calculated when historical chart loads)
+    updateUtilizationStats();
 }
 
 function renderGenerators(generators) {
@@ -301,24 +259,9 @@ function createGauge(canvasId, value, min, max, color) {
     });
 }
 
+// Use the formatRelativeTime from uiUtils
 function formatRelativeTime(date) {
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Ara mateix';
-    if (diffMins < 60) return `Fa ${diffMins} min`;
-    if (diffHours < 24) return `Fa ${diffHours}h`;
-    if (diffDays < 7) return `Fa ${diffDays} dies`;
-    
-    return date.toLocaleDateString('ca-ES', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    return window.uiUtils.formatRelativeTime(date);
 }
 
 // Update only metrics for existing generators
@@ -460,102 +403,6 @@ function setupAutoRefresh() {
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize dashboard
     initializeDashboard();
-    
-    // Close profile modal button
-    const closeProfileBtn = document.getElementById('closeProfileBtn');
-    if (closeProfileBtn) {
-        closeProfileBtn.addEventListener('click', closeProfile);
-    }
-
-    // Close modal when clicking outside
-    const profileModal = document.getElementById('profileModal');
-    if (profileModal) {
-        profileModal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeProfile();
-            }
-        });
-    }
-
-    // Profile form submission
-    const profileForm = document.getElementById('profileForm');
-    if (profileForm) {
-        profileForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const name = document.getElementById('profileName').value.trim();
-            const submitBtn = e.target.querySelector('button[type="submit"]');
-            const btnText = submitBtn.querySelector('.btn-text');
-            const loading = document.getElementById('profileLoading');
-            
-            // Hide any existing messages
-            hideProfileMessage();
-            
-            if (!name) {
-                showProfileMessage('El nom és obligatori', 'error');
-                return;
-            }
-            
-            // Show loading
-            submitBtn.disabled = true;
-            btnText.style.display = 'none';
-            loading.classList.remove('loading-hidden');
-            
-            try {
-                const response = await fetch('/api/auth/profile', {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${getAuthToken()}`
-                    },
-                    body: JSON.stringify({ name })
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    // Update the name in the dashboard
-                    const dashboardTitle = document.querySelector('.dashboard-title');
-                    if (dashboardTitle) {
-                        dashboardTitle.textContent = `Benvingut, ${data.name}!`;
-                    }
-                    // Update navbar
-                    const userDropdown = document.querySelector('#userDropdown');
-                    if (userDropdown && userDropdown.childNodes[0]) {
-                        userDropdown.childNodes[0].textContent = data.name;
-                    }
-                    
-                    // Show success message and close modal after delay
-                    showProfileMessage('Perfil actualitzat correctament', 'success');
-                    setTimeout(() => {
-                        closeProfile();
-                    }, 1500);
-                } else {
-                    // Handle specific validation errors
-                    if (response.status === 400 && data.details && data.details.length > 0) {
-                        // Find the name field error specifically
-                        const nameError = data.details.find(detail => detail.field === 'name');
-                        if (nameError) {
-                            showProfileMessage(nameError.message, 'error');
-                        } else {
-                            showProfileMessage(data.details[0].message, 'error');
-                        }
-                    } else {
-                        // Generic error message
-                        showProfileMessage(data.error || 'Error actualitzant el perfil', 'error');
-                    }
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showProfileMessage('Error de connexió. Torna-ho a intentar.', 'error');
-            } finally {
-                // Hide loading
-                submitBtn.disabled = false;
-                btnText.style.display = 'inline';
-                loading.classList.add('loading-hidden');
-            }
-        });
-    }
 });
 
 function initializeDashboard() {
@@ -603,26 +450,16 @@ async function loadHistoricalChart(period = currentPeriod) {
     try {
         showChartLoading();
         
-        const response = await fetch(`/api/dashboard/historical-chart?period=${period}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${getAuthToken()}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Error carregant dades històriques');
-        }
-
+        const { data } = await window.apiClient.get(`/api/dashboard/historical-chart?period=${period}`);
+        
         renderHistoricalChart(data);
+        renderDifferenceChart(data);
         currentPeriod = period;
 
     } catch (error) {
         console.error('Error loading historical chart:', error);
         showChartError(error.message);
+        showDifferenceChartError(error.message);
     }
 }
 
@@ -660,8 +497,11 @@ function renderHistoricalChart(data) {
         historicalChart.destroy();
     }
 
+    // Filter out difference dataset for the line chart - only show consumption and generation
+    const lineDatasets = data.datasets.filter(dataset => dataset.type !== 'difference');
+    
     // Prepare datasets with different colors for each type
-    const processedDatasets = data.datasets.map((dataset, index) => {
+    const processedDatasets = lineDatasets.map((dataset, index) => {
         let borderColor, backgroundColor;
         
         // Check if it's consumption data by looking at the label
@@ -813,6 +653,9 @@ function renderHistoricalChart(data) {
         }
     });
 
+    // Calculate energy utilization after rendering the chart
+    calculateEnergyUtilization(data);
+    
     showChart();
     
     console.log('Historical chart rendered successfully', {
@@ -823,20 +666,45 @@ function renderHistoricalChart(data) {
 }
 
 function setupPeriodControls() {
-    const periodButtons = document.querySelectorAll('.period-btn');
+    const periodToggle = document.getElementById('period-toggle');
+    const differencePeriodToggle = document.getElementById('difference-period-toggle');
     
-    periodButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const period = this.getAttribute('data-period');
-            
-            // Update active state
-            periodButtons.forEach(btn => btn.classList.remove('active'));
-            this.classList.add('active');
-            
-            // Load new data
-            loadHistoricalChart(period);
+    // Function to sync both toggles and load data
+    function syncPeriodsAndLoadData(period, sourceToggleId) {
+        // Update the other toggle to match
+        if (sourceToggleId === 'period-toggle' && differencePeriodToggle) {
+            const modeIndex = ['24h', '7d', '30d'].indexOf(period);
+            if (modeIndex !== -1) {
+                differencePeriodToggle.setAttribute('mode', modeIndex.toString());
+            }
+        } else if (sourceToggleId === 'difference-period-toggle' && periodToggle) {
+            const modeIndex = ['24h', '7d', '30d'].indexOf(period);
+            if (modeIndex !== -1) {
+                periodToggle.setAttribute('mode', modeIndex.toString());
+            }
+        }
+        
+        // Load new data with the selected period
+        loadHistoricalChart(period);
+        
+        console.log('Period changed to:', period);
+    }
+    
+    // Setup event listener for historical chart toggle
+    if (periodToggle) {
+        periodToggle.addEventListener('mode-change', function(event) {
+            const period = event.detail.value;
+            syncPeriodsAndLoadData(period, 'period-toggle');
         });
-    });
+    }
+    
+    // Setup event listener for difference chart toggle
+    if (differencePeriodToggle) {
+        differencePeriodToggle.addEventListener('mode-change', function(event) {
+            const period = event.detail.value;
+            syncPeriodsAndLoadData(period, 'difference-period-toggle');
+        });
+    }
 }
 
 // Auto-refresh historical chart
@@ -849,54 +717,435 @@ function setupHistoricalChartAutoRefresh() {
     }, 300000); // 5 minutes
 }
 
-// Profile message helper functions
-function showProfileMessage(message, type = 'error') {
-    const messageContainer = document.getElementById('profileMessage');
-    const messageText = messageContainer.querySelector('.message-text');
-    const messageIcon = messageContainer.querySelector('.message-icon');
+// Difference Chart Functions
+function showDifferenceChartLoading() {
+    document.getElementById('differenceChartLoading').style.display = 'flex';
+    document.getElementById('differenceChartError').style.display = 'none';
+    document.getElementById('differenceChart').style.display = 'none';
+}
+
+function showDifferenceChartError(message) {
+    document.getElementById('differenceChartLoading').style.display = 'none';
+    document.getElementById('differenceChartError').style.display = 'flex';
+    document.getElementById('differenceChart').style.display = 'none';
     
-    if (!messageContainer || !messageText || !messageIcon) return;
-    
-    // Set message text
-    messageText.textContent = message;
-    
-    // Remove existing type classes
-    messageContainer.classList.remove('success', 'error');
-    
-    // Add appropriate type class and icon
-    messageContainer.classList.add(type);
-    
-    if (type === 'success') {
-        messageIcon.setAttribute('data-lucide', 'check-circle');
-    } else {
-        messageIcon.setAttribute('data-lucide', 'alert-circle');
-    }
-    
-    // Show the message
-    messageContainer.style.display = 'block';
-    
-    // Reinitialize Lucide icons for the new icon
-    if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
-    }
-    
-    // Auto-hide error messages after 5 seconds
-    if (type === 'error') {
-        setTimeout(() => {
-            hideProfileMessage();
-        }, 5000);
+    const errorElement = document.querySelector('#differenceChartError p');
+    if (errorElement) {
+        errorElement.textContent = message || 'Error carregant les dades d\'aprofitament';
     }
 }
 
-function hideProfileMessage() {
-    const messageContainer = document.getElementById('profileMessage');
-    if (messageContainer) {
-        messageContainer.style.display = 'none';
+function showDifferenceChart() {
+    document.getElementById('differenceChartLoading').style.display = 'none';
+    document.getElementById('differenceChartError').style.display = 'none';
+    document.getElementById('differenceChart').style.display = 'block';
+}
+
+function renderDifferenceChart(data) {
+    const canvas = document.getElementById('differenceChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (differenceChart) {
+        differenceChart.destroy();
+    }
+
+    // Calculate grid energy and solar energy for each timestamp
+    const consumptionDatasets = data.datasets.filter(dataset => {
+        if (dataset.type === 'difference') return false;
+        return dataset.type === 'consumption' || 
+               (dataset.label && dataset.label.toLowerCase().includes('consum'));
+    });
+    
+    const generationDatasets = data.datasets.filter(dataset => {
+        if (dataset.type === 'difference') return false;
+        return dataset.type === 'generation' || 
+               (dataset.label && !dataset.label.toLowerCase().includes('consum') && 
+                dataset.label.includes('%'));
+    });
+
+    const gridEnergyData = [];
+    const solarEnergyData = [];
+
+    // Calculate for each timestamp
+    for (let i = 0; i < data.labels.length; i++) {
+        let consumptionAtTime = 0;
+        let generationAtTime = 0;
+
+        // Sum consumption at this timestamp
+        consumptionDatasets.forEach(dataset => {
+            const value = dataset.data[i];
+            if (value !== null && value !== undefined && !isNaN(value) && value > 0) {
+                consumptionAtTime += value;
+            }
+        });
+
+        // Sum generation at this timestamp
+        generationDatasets.forEach(dataset => {
+            const value = dataset.data[i];
+            if (value !== null && value !== undefined && !isNaN(value) && value > 0) {
+                generationAtTime += value;
+            }
+        });
+
+        // Calculate solar energy used (min between consumption and generation) - positive values
+        const solarEnergyUsed = Math.min(consumptionAtTime, generationAtTime);
+        
+        // Calculate grid energy needed (consumption - solar energy used) - negative values for downward display
+        const gridEnergyNeeded = Math.max(0, consumptionAtTime - solarEnergyUsed);
+
+        solarEnergyData.push(consumptionAtTime > 0 || generationAtTime > 0 ? solarEnergyUsed : null);
+        gridEnergyData.push(consumptionAtTime > 0 || generationAtTime > 0 ? -gridEnergyNeeded : null); // Negative for downward display
+    }
+
+    differenceChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.labels,
+            datasets: [
+                {
+                    label: 'Energia solar',
+                    data: solarEnergyData,
+                    backgroundColor: '#fcbd25',
+                    borderColor: '#fcbd25',
+                    borderWidth: 0,
+                    borderRadius: 2,
+                    borderSkipped: false,
+                    maxBarThickness: 20,
+                },
+                {
+                    label: 'Energia de la xarxa',
+                    data: gridEnergyData,
+                    backgroundColor: '#6b7280',
+                    borderColor: '#6b7280',
+                    borderWidth: 0,
+                    borderRadius: 2,
+                    borderSkipped: false,
+                    maxBarThickness: 20,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            devicePixelRatio: window.devicePixelRatio || 1,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            elements: {
+                bar: {
+                    borderWidth: 0,
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Temps',
+                        color: '#666',
+                        font: {
+                            size: 12,
+                            weight: 500
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: '#666',
+                        font: {
+                            size: 11
+                        },
+                        maxTicksLimit: 8
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Energia (W)',
+                        color: '#666',
+                        font: {
+                            size: 12,
+                            weight: 500
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: '#666',
+                        font: {
+                            size: 11
+                        },
+                        callback: function(value) {
+                            const absValue = Math.abs(value);
+                            if (absValue >= 1000) {
+                                return (absValue / 1000).toFixed(1) + 'kW';
+                            }
+                            return absValue.toFixed(0) + 'W';
+                        }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false // We use custom legend
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    titleColor: '#1b4444',
+                    bodyColor: '#333',
+                    borderColor: '#e9ecef',
+                    borderWidth: 1,
+                    cornerRadius: 8,
+                    displayColors: true,
+                    callbacks: {
+                        title: function(context) {
+                            return `Hora: ${context[0].label}`;
+                        },
+                        label: function(context) {
+                            const value = context.parsed.y;
+                            if (value === null || value === 0) return null;
+                            
+                            const absValue = Math.abs(value);
+                            const unit = absValue >= 1000 ? 'kW' : 'W';
+                            const displayValue = absValue >= 1000 ? (absValue / 1000).toFixed(1) : absValue.toFixed(0);
+                            
+                            return `${context.dataset.label}: ${displayValue} ${unit}`;
+                        },
+                        footer: function(context) {
+                            // Calculate total consumption for this timestamp
+                            const solarValue = context.find(c => c.dataset.label === 'Energia solar')?.parsed.y || 0;
+                            const gridValue = Math.abs(context.find(c => c.dataset.label === 'Energia de la xarxa')?.parsed.y || 0);
+                            const total = solarValue + gridValue;
+                            
+                            if (total > 0) {
+                                const unit = total >= 1000 ? 'kW' : 'W';
+                                const displayValue = total >= 1000 ? (total / 1000).toFixed(1) : total.toFixed(0);
+                                return `Total consum: ${displayValue} ${unit}`;
+                            }
+                            return '';
+                        }
+                    }
+                }
+            },
+            animation: {
+                duration: 1000,
+                easing: 'easeInOutQuart'
+            }
+        }
+    });
+
+    showDifferenceChart();
+    
+    console.log('Energy source chart rendered successfully', {
+        period: data.period,
+        solarDataPoints: solarEnergyData.filter(v => v !== null && v > 0).length,
+        gridDataPoints: gridEnergyData.filter(v => v !== null && v > 0).length
+    });
+}
+
+// Calculate energy utilization from historical data
+function calculateEnergyUtilization(data) {
+    console.log('🔍 Calculating energy utilization with data:', data);
+    
+    if (!data || !data.datasets || data.datasets.length === 0) {
+        console.log('❌ No data or datasets found');
+        energyUtilizationData.totalKwUtilized = 0;
+        energyUtilizationData.utilizationPercentage = 0;
+        updateUtilizationStats();
+        return;
+    }
+
+    console.log('📊 Available datasets:', data.datasets.map(d => ({ label: d.label, type: d.type, dataLength: d.data?.length })));
+
+    // More flexible detection of consumption and generation datasets
+    const consumptionDatasets = data.datasets.filter(dataset => {
+        if (dataset.type === 'difference') return false; // Skip difference dataset
+        
+        // Check for consumption indicators
+        const isConsumption = dataset.type === 'consumption' || 
+                             (dataset.label && dataset.label.toLowerCase().includes('consum')) ||
+                             (dataset.label && dataset.label.toLowerCase().includes('device'));
+        
+        console.log(`Dataset "${dataset.label}" - Type: ${dataset.type} - Is Consumption: ${isConsumption}`);
+        return isConsumption;
+    });
+    
+    const generationDatasets = data.datasets.filter(dataset => {
+        if (dataset.type === 'difference') return false; // Skip difference dataset
+        
+        // Check for generation indicators
+        const isGeneration = dataset.type === 'generation' || 
+                            (dataset.label && !dataset.label.toLowerCase().includes('consum') && 
+                             !dataset.label.toLowerCase().includes('device') &&
+                             (dataset.label.toLowerCase().includes('generador') ||
+                              dataset.label.toLowerCase().includes('solar') ||
+                              dataset.label.toLowerCase().includes('fotovoltaic') ||
+                              dataset.label.includes('%'))); // Generators usually have % in label
+        
+        console.log(`Dataset "${dataset.label}" - Type: ${dataset.type} - Is Generation: ${isGeneration}`);
+        return isGeneration;
+    });
+
+    console.log(`🔋 Found ${consumptionDatasets.length} consumption datasets and ${generationDatasets.length} generation datasets`);
+
+    if (consumptionDatasets.length === 0 && generationDatasets.length === 0) {
+        console.log('⚠️ No consumption or generation datasets found');
+        energyUtilizationData.totalKwUtilized = 0;
+        energyUtilizationData.utilizationPercentage = 0;
+        updateUtilizationStats();
+        return;
+    }
+
+    let totalConsumption = 0;
+    let totalGeneration = 0;
+    let totalUtilized = 0;
+    let validDataPoints = 0;
+
+    // Calculate totals for each timestamp
+    for (let i = 0; i < data.labels.length; i++) {
+        let consumptionAtTime = 0;
+        let generationAtTime = 0;
+
+        // Sum consumption at this timestamp
+        consumptionDatasets.forEach(dataset => {
+            const value = dataset.data[i];
+            if (value !== null && value !== undefined && !isNaN(value) && value > 0) {
+                consumptionAtTime += value;
+            }
+        });
+
+        // Sum generation at this timestamp
+        generationDatasets.forEach(dataset => {
+            const value = dataset.data[i];
+            if (value !== null && value !== undefined && !isNaN(value) && value > 0) {
+                generationAtTime += value;
+            }
+        });
+
+        // Only count if we have valid data
+        if (consumptionAtTime > 0 || generationAtTime > 0) {
+            totalConsumption += consumptionAtTime;
+            totalGeneration += generationAtTime;
+            
+            // Energy utilized = minimum between consumption and generation at each point
+            const utilizedAtTime = Math.min(consumptionAtTime, generationAtTime);
+            totalUtilized += utilizedAtTime;
+            
+            validDataPoints++;
+        }
+    }
+
+    console.log(`📈 Calculation results:`, {
+        totalConsumption,
+        totalGeneration,
+        totalUtilized,
+        validDataPoints
+    });
+
+    // Convert to kW and calculate totals and averages
+    const avgConsumptionKw = validDataPoints > 0 ? (totalConsumption / validDataPoints) / 1000 : 0;
+    const totalUtilizedKw = totalUtilized / 1000; // Total kW utilized in the period
+    const totalGenerationKw = totalGeneration / 1000; // Total kW generated in the period
+    
+    // Calculate total wasted energy (total generation - total utilized)
+    const totalWastedKw = Math.max(0, totalGenerationKw - totalUtilizedKw);
+    
+    // Calculate utilization percentage based on averages
+    const utilizationPercentage = avgConsumptionKw > 0 ? ((totalUtilized / validDataPoints) / 1000 / avgConsumptionKw) * 100 : 0;
+
+    // Update global data with totals
+    energyUtilizationData.totalKwUtilized = totalUtilizedKw;
+    energyUtilizationData.totalKwWasted = totalWastedKw;
+    energyUtilizationData.utilizationPercentage = utilizationPercentage;
+
+    // Update the UI
+    updateUtilizationStats();
+
+    console.log('✅ Energy utilization calculated:', {
+        avgConsumptionKw: avgConsumptionKw.toFixed(2),
+        totalUtilizedKw: totalUtilizedKw.toFixed(2),
+        totalWastedKw: totalWastedKw.toFixed(2),
+        utilizationPercentage: utilizationPercentage.toFixed(1),
+        validDataPoints,
+        consumptionDatasets: consumptionDatasets.length,
+        generationDatasets: generationDatasets.length
+    });
+}
+
+// Update utilization stats in the UI
+function updateUtilizationStats() {
+    const totalKwUtilizedEl = document.getElementById('totalKwUtilized');
+    const totalKwWastedEl = document.getElementById('totalKwWasted');
+    const utilizationPercentageEl = document.getElementById('utilizationPercentage');
+
+    console.log('🔄 Updating utilization stats:', {
+        totalKwUtilized: energyUtilizationData.totalKwUtilized,
+        totalKwWasted: energyUtilizationData.totalKwWasted,
+        utilizationPercentage: energyUtilizationData.utilizationPercentage,
+        totalKwUtilizedEl: !!totalKwUtilizedEl,
+        totalKwWastedEl: !!totalKwWastedEl,
+        utilizationPercentageEl: !!utilizationPercentageEl
+    });
+
+    if (totalKwUtilizedEl) {
+        const displayValue = energyUtilizationData.totalKwUtilized > 0 
+            ? `${energyUtilizationData.totalKwUtilized.toFixed(1)}`
+            : '-';
+        totalKwUtilizedEl.textContent = displayValue;
+        console.log(`✅ Updated totalKwUtilized to: ${displayValue}`);
+    } else {
+        console.log('❌ totalKwUtilized element not found');
+    }
+
+    if (totalKwWastedEl) {
+        const displayValue = energyUtilizationData.totalKwWasted > 0 
+            ? `${energyUtilizationData.totalKwWasted.toFixed(1)}`
+            : '-';
+        totalKwWastedEl.textContent = displayValue;
+        console.log(`✅ Updated totalKwWasted to: ${displayValue}`);
+    } else {
+        console.log('❌ totalKwWasted element not found');
+    }
+
+    if (utilizationPercentageEl) {
+        const displayValue = energyUtilizationData.utilizationPercentage > 0 
+            ? `${energyUtilizationData.utilizationPercentage.toFixed(1)}%`
+            : '-';
+        utilizationPercentageEl.textContent = displayValue;
+        console.log(`✅ Updated utilizationPercentage to: ${displayValue}`);
+    } else {
+        console.log('❌ utilizationPercentage element not found');
     }
 }
+
+// Function to test utilization display with mock data
+function testUtilizationDisplay() {
+    console.log('🧪 Testing utilization display with mock data...');
+    
+    // Set mock data
+    energyUtilizationData.totalKwUtilized = 2.5;
+    energyUtilizationData.totalKwWasted = 1.2;
+    energyUtilizationData.utilizationPercentage = 75.3;
+    
+    // Update display
+    updateUtilizationStats();
+    
+    console.log('✅ Mock data applied. Check the dashboard for values.');
+}
+
+// Make test function available globally for debugging
+window.testUtilizationDisplay = testUtilizationDisplay;
 
 // Make functions available globally
-window.showProfile = showProfile;
 window.loadDashboardData = loadDashboardData;
 window.loadHistoricalChart = loadHistoricalChart;
 
@@ -905,9 +1154,6 @@ window.dashboardUtils = {
     initializeDashboard,
     loadDashboardData,
     loadHistoricalChart,
-    showProfile,
-    closeProfile,
     formatRelativeTime,
-    showProfileMessage,
-    hideProfileMessage
+    calculateEnergyUtilization
 };

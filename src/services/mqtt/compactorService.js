@@ -9,7 +9,8 @@ class CompactorService {
     this.deviceStateService = new DeviceStateService();
     
     // Configuración
-    this.compactionInterval = 300000; // 5 minutos 
+    const compactorTimeMinutes = parseInt(process.env.COMPACTOR_TIME_INTERVAL) || 1;
+    this.compactionInterval = compactorTimeMinutes * 60 * 1000; // Convertir minutos a milisegundos
     this.isRunning = false;
     this.intervalId = null;
     
