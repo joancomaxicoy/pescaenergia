@@ -3,20 +3,19 @@ const logger = require('./utils/logger');
 const database = require('./utils/database');
 const MqttDataService = require('./services/mqtt/mqttDataService');
 const mqttServiceRegistry = require('./services/mqtt/mqttServiceRegistry');
-const AutomationTimerService = require('./services/automationTimerService');
 const ExpressApp = require('./app');
 
 class PescaEnergiaBackend {
   constructor() {
     this.mqttDataService = null;
-    this.automationTimerService = null;
+    this.plugsService = null;
     this.expressApp = null;
     this.isShuttingDown = false;
   }
 
   async initialize() {
     try {
-      logger.info('Iniciando PescaEnergia Backend...');
+      logger.info('Iniciando PescaEnergia Backend con nuevo sistema de automatización...');
 
       // Conectar a la base de datos
       await database.connect();
@@ -29,9 +28,13 @@ class PescaEnergiaBackend {
       // Registrar el servicio MQTT en el registry para acceso global
       mqttServiceRegistry.register(this.mqttDataService);
 
-      // Inicializar el servicio de automatización
-      this.automationTimerService = new AutomationTimerService();
-      await this.automationTimerService.start();
+      // Inicializar el servicio de plugs (que incluye el nuevo AutomationManager)
+      const PlugsService = require('./services/plugsService');
+      this.plugsService = new PlugsService();
+
+      // Inicializar y iniciar el nuevo AutomationManager
+      await this.plugsService.initializeAutomationManager();
+      await this.plugsService.startAutomationManager();
 
       // Inicializar el servidor Express
       this.expressApp = new ExpressApp();
@@ -43,7 +46,7 @@ class PescaEnergiaBackend {
       logger.info('PescaEnergia Backend iniciado correctamente');
       logger.info('Servicios activos:');
       logger.info('- Servicio MQTT: Activo');
-      logger.info('- Servicio de Automatización: Activo');
+      logger.info('- Nuevo Sistema de Automatización: Activo');
       logger.info('- Servidor Express: Activo');
       logger.info('- Base de datos: Conectada');
       
@@ -121,8 +124,8 @@ class PescaEnergiaBackend {
         }
 
         // Cerrar servicio de automatización
-        if (this.automationTimerService) {
-          await this.automationTimerService.stop();
+        if (this.plugsService) {
+          await this.plugsService.closeAutomationManager();
         }
 
         // Cerrar servicio de datos MQTT

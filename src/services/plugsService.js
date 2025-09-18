@@ -2,13 +2,15 @@ const logger = require('../utils/logger');
 const database = require('../utils/database');
 const MqttService = require('./mqtt/mqttService');
 const DeviceHistoryService = require('./deviceHistoryService');
+const AutomationManager = require('./automation/AutomationManager');
 
 class PlugsService {
   constructor() {
     this.logger = logger;
     this.mqttService = null;
+    this.automationManager = null; // Se inicializará después de que mqttService esté listo
     this.initializeMqtt();
-    
+
     // Inicializar health check después de un breve delay para permitir inicialización
     setTimeout(() => {
       this.startMqttHealthCheck();
@@ -16,36 +18,26 @@ class PlugsService {
   }
 
   /**
-   * Inicializa el servicio MQTT para envío de comandos con reintentos
+   * Inicializa el servicio MQTT obteniendo la instancia singleton compartida
    */
   async initializeMqtt() {
-    const maxRetries = 5;
-    const baseDelay = 2000;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        this.mqttService = new MqttService();
+    try {
+      // Obtener la instancia singleton compartida
+      this.mqttService = new MqttService();
+
+      // Verificar que esté conectado (ya que es singleton, puede que ya esté inicializado)
+      if (!this.mqttService.isConnected) {
+        this.logger.info('🔄 Instancia MQTT singleton obtenida pero no conectada, intentando conectar...');
         await this.mqttService.connect();
-        this.logger.info('✅ Servicio MQTT para control de plugs inicializado y conectado');
-        return;
-      } catch (error) {
-        this.logger.warn(`❌ Intento ${attempt}/${maxRetries} de conexión MQTT falló`, {
-          error: error.message,
-          attempt,
-          maxRetries
-        });
-        
-        if (attempt < maxRetries) {
-          const delay = baseDelay * Math.pow(2, attempt - 1); // Backoff exponencial
-          this.logger.info(`⏳ Reintentando conexión MQTT en ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
       }
+
+      this.logger.info('✅ Servicio MQTT singleton para control de plugs inicializado y conectado');
+    } catch (error) {
+      this.logger.error('❌ Error obteniendo instancia MQTT singleton:', {
+        error: error.message
+      });
+      this.mqttService = null;
     }
-    
-    // No lanzar error, solo loggear y dejar mqttService = null
-    this.logger.error('🔴 MQTT no disponible después de varios intentos, se reintentará en cada comando');
-    this.mqttService = null;
   }
 
   /**
@@ -79,6 +71,11 @@ class PlugsService {
           
           if (this.mqttService && this.mqttService.isConnected) {
             this.logger.info('✅ Health check: MQTT reconectado exitosamente');
+            
+            // Reinicializar AutomationManager si MQTT se reconectó
+            if (!this.automationManager) {
+              await this.initializeAutomationManager();
+            }
           }
         } else {
           this.logger.debug('✅ Health check: MQTT conectado correctamente');
@@ -91,6 +88,95 @@ class PlugsService {
     }, 120000); // Cada 2 minutos
     
     this.logger.info('🔍 Health check MQTT iniciado (cada 2 minutos)');
+  }
+
+  /**
+   * Inicializa el AutomationManager con los servicios necesarios (usando singleton)
+   */
+  async initializeAutomationManager() {
+    try {
+      this.logger.info('Obteniendo instancia singleton de AutomationManager...');
+
+      // Obtener la instancia singleton del AutomationManager
+      this.automationManager = AutomationManager.getInstance(this, this.mqttService);
+
+      // Si es la primera vez que se inicializa, llamar a initialize()
+      if (!this.automationManager.memoryCache.isInitialized) {
+        this.logger.info('Inicializando AutomationManager singleton por primera vez...');
+        await this.automationManager.initialize();
+      } else {
+        this.logger.info('AutomationManager singleton ya estaba inicializado, actualizando servicios...');
+        this.automationManager.updateServices(this, this.mqttService);
+      }
+
+      this.logger.info('✅ AutomationManager singleton configurado exitosamente');
+
+    } catch (error) {
+      this.logger.error('❌ Error configurando AutomationManager singleton:', {
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Inicia el AutomationManager
+   */
+  async startAutomationManager() {
+    try {
+      if (!this.automationManager) {
+        await this.initializeAutomationManager();
+      }
+
+      if (!this.automationManager.isRunning) {
+        this.automationManager.start();
+        this.logger.info('✅ AutomationManager iniciado');
+      } else {
+        this.logger.warn('AutomationManager ya está ejecutándose');
+      }
+
+    } catch (error) {
+      this.logger.error('❌ Error iniciando AutomationManager:', {
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Detiene el AutomationManager
+   */
+  async stopAutomationManager() {
+    try {
+      if (this.automationManager && this.automationManager.isRunning) {
+        this.automationManager.stop();
+        this.logger.info('✅ AutomationManager detenido');
+      }
+
+    } catch (error) {
+      this.logger.error('❌ Error deteniendo AutomationManager:', {
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Cierra el AutomationManager completamente
+   */
+  async closeAutomationManager() {
+    try {
+      if (this.automationManager) {
+        await this.automationManager.close();
+        this.automationManager = null;
+        this.logger.info('✅ AutomationManager cerrado');
+      }
+
+    } catch (error) {
+      this.logger.error('❌ Error cerrando AutomationManager:', {
+        error: error.message
+      });
+    }
   }
 
   /**
@@ -859,6 +945,81 @@ class PlugsService {
         scheduleSlots: automationConfig.schedule?.length || 0
       });
 
+      // Notificar al AutomationManager sobre el cambio de configuración
+      if (this.automationManager) {
+        try {
+          this.logger.info('Notificando cambio de configuración al AutomationManager', {
+            plugId,
+            deviceName: plug.device_name,
+            automationType: automationConfig.type,
+            scheduleSlots: automationConfig.schedule?.length || 0,
+            automationManagerStatus: 'available'
+          });
+
+          // Actualizar configuración en el cache del AutomationManager
+          await this.automationManager.updateDeviceConfig(plug.id);
+
+          this.logger.info('AutomationManager notificado exitosamente', {
+            plugId,
+            deviceName: plug.device_name
+          });
+
+        } catch (validationError) {
+          // Loggear el error pero no fallar la operación de guardado
+          this.logger.error('Error notificando al AutomationManager', {
+            plugId,
+            deviceName: plug.device_name,
+            error: validationError.message,
+            stack: validationError.stack
+          });
+
+          // No lanzamos el error para no interrumpir el guardado exitoso
+        }
+      } else {
+        this.logger.warn('AutomationManager no disponible para notificar cambio de configuración', {
+          plugId,
+          deviceName: plug.device_name,
+          automationManagerStatus: 'null',
+          mqttServiceStatus: this.mqttService ? 'available' : 'null',
+          suggestion: 'La configuración se guardó correctamente y se aplicará en la próxima recarga del cache (máximo 5 minutos)'
+        });
+
+        // Intentar inicializar el AutomationManager si no está disponible
+        try {
+          this.logger.info('Intentando inicializar AutomationManager...', {
+            plugId,
+            deviceName: plug.device_name
+          });
+
+          await this.initializeAutomationManager();
+          await this.startAutomationManager();
+
+          // Si se inicializó correctamente, intentar notificar
+          if (this.automationManager) {
+            this.logger.info('AutomationManager inicializado exitosamente, notificando cambio...', {
+              plugId,
+              deviceName: plug.device_name
+            });
+
+            await this.automationManager.updateDeviceConfig(plug.id);
+
+            this.logger.info('AutomationManager notificado exitosamente después de inicialización', {
+              plugId,
+              deviceName: plug.device_name
+            });
+          }
+
+        } catch (initError) {
+          this.logger.error('Error inicializando AutomationManager', {
+            plugId,
+            deviceName: plug.device_name,
+            error: initError.message,
+            stack: initError.stack,
+            fallback: 'La configuración se guardó y se aplicará en la próxima recarga automática del cache'
+          });
+        }
+      }
+
       return {
         success: true,
         operation: operation,
@@ -1271,6 +1432,78 @@ class PlugsService {
         status: 'unhealthy',
         database: 'error',
         mqtt: this.getMqttStatus(),
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Obtiene estadísticas del nuevo sistema de automatización
+   * @returns {Object} - Estadísticas del AutomationManager
+   */
+  getAutomationStats() {
+    try {
+      if (!this.automationManager) {
+        return {
+          available: false,
+          reason: 'AutomationManager no inicializado',
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      const stats = this.automationManager.getStats();
+      
+      return {
+        available: true,
+        system: 'new_automation_manager',
+        ...stats,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      this.logger.error('Error obteniendo estadísticas de automatización', { 
+        error: error.message 
+      });
+
+      return {
+        available: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Obtiene información de debug del sistema de automatización
+   * @returns {Object} - Información de debug detallada
+   */
+  getAutomationDebugInfo() {
+    try {
+      if (!this.automationManager) {
+        return {
+          available: false,
+          reason: 'AutomationManager no inicializado',
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      const debugInfo = this.automationManager.getDebugInfo();
+      
+      return {
+        available: true,
+        system: 'new_automation_manager',
+        ...debugInfo,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      this.logger.error('Error obteniendo debug info de automatización', { 
+        error: error.message 
+      });
+
+      return {
+        available: false,
         error: error.message,
         timestamp: new Date().toISOString()
       };

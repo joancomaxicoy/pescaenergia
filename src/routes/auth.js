@@ -230,6 +230,22 @@ router.post('/login',
         });
       }
 
+      if (error.code === 'PASSWORD_NOT_SET') {
+        return res.status(403).json({
+          error: error.message,
+          code: 'PASSWORD_NOT_SET',
+          requiresPasswordSetup: true
+        });
+      }
+
+      if (error.code === 'CUPS_NOT_ASSIGNED') {
+        return res.status(403).json({
+          error: error.message,
+          code: 'CUPS_NOT_ASSIGNED',
+          requiresCupsAssignment: true
+        });
+      }
+
       res.status(401).json({
         error: 'Credenciales inválidas',
         code: 'INVALID_CREDENTIALS'
@@ -630,6 +646,98 @@ router.post('/change-password',
       res.status(400).json({
         error: error.message,
         code: 'PASSWORD_CHANGE_ERROR'
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/auth/set-initial-password:
+ *   post:
+ *     summary: Establecer contraseña inicial (usuarios creados por admin)
+ *     tags: [Autenticación]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - password
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Token de verificación de email
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *                 description: Nueva contraseña del usuario
+ *     responses:
+ *       200:
+ *         description: Contraseña establecida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       400:
+ *         description: Token inválido o usuario ya tiene contraseña
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.post('/set-initial-password',
+  sanitizeInput,
+  async (req, res) => {
+    try {
+      const { token, password } = req.body;
+
+      // Validar campos requeridos
+      if (!token || !password) {
+        return res.status(400).json({
+          error: 'Token y contraseña son requeridos',
+          code: 'MISSING_FIELDS'
+        });
+      }
+
+      // Validar longitud mínima de password
+      if (password.length < 8) {
+        return res.status(400).json({
+          error: 'La contraseña debe tener al menos 8 caracteres',
+          code: 'PASSWORD_TOO_SHORT'
+        });
+      }
+
+      const result = await authService.setInitialPassword(token, password);
+      res.json(result);
+    } catch (error) {
+      logger.error('Error estableciendo password inicial:', error);
+      
+      if (error.message.includes('Token de verificació invàlid') || 
+          error.message.includes('caducat')) {
+        return res.status(400).json({
+          error: 'Token inválido o expirado',
+          code: 'INVALID_TOKEN'
+        });
+      }
+
+      if (error.message.includes('Email no verificat')) {
+        return res.status(400).json({
+          error: 'Email no verificado',
+          code: 'EMAIL_NOT_VERIFIED'
+        });
+      }
+
+      if (error.message.includes('ja té una contrasenya')) {
+        return res.status(400).json({
+          error: 'Este usuario ya tiene una contraseña establecida',
+          code: 'PASSWORD_ALREADY_SET'
+        });
+      }
+
+      res.status(500).json({
+        error: 'Error interno del servidor',
+        code: 'INTERNAL_ERROR'
       });
     }
   }

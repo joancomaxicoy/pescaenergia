@@ -34,6 +34,7 @@ class PlugCard extends HTMLElement {
         // SSE para tiempo real
         this.isSSEActive = false;
         this.lastSSEMessage = null;
+        this.sseManager = null;
         
         // Bind methods
         this.handleToggle = this.handleToggle.bind(this);
@@ -67,10 +68,23 @@ class PlugCard extends HTMLElement {
                 this.plugData = JSON.parse(newValue);
                 this.render();
                 this.updateStatus();
+                this.initializeSSE();
             } catch (error) {
                 console.error('Error parsing plug data:', error);
             }
         }
+    }
+
+    disconnectedCallback() {
+        // Limpiar la conexión SSE cuando el componente se desconecta
+        if (this.sseManager) {
+            console.log(`🔌 Desconectando SSE para plug ${this.plugData?.device_name || 'unknown'}`);
+            this.sseManager.disconnect();
+            this.sseManager = null;
+        }
+
+        // Limpiar otros recursos
+        this.cleanupVisibilityObserver();
     }
 
     /**
@@ -709,6 +723,7 @@ class PlugCard extends HTMLElement {
      * @param {Object} data - Datos del mensaje SSE
      */
     handleSSEMessage(data) {
+       
         if (!this.plugData || !data) return;
 
         try {
@@ -996,6 +1011,29 @@ class PlugCard extends HTMLElement {
     }
 
     /**
+     * Inicializa la conexión SSE para este plug
+     */
+    initializeSSE() {
+        if (!this.plugData?.shelly_device_id) {
+            console.warn('No se puede inicializar SSE: faltan datos del plug');
+            return;
+        }
+
+        // Crear instancia de SSEManager para el endpoint de plugs
+        this.sseManager = new SSEManager('/api/sse/plugs');
+
+        // Agregar callback que filtra mensajes para este dispositivo
+        this.sseManager.addCallback((data) => {
+            // Filtrar mensajes que empiecen con el shelly_device_id de este plug
+            if (data.topic && data.topic.startsWith(this.plugData.shelly_device_id)) {
+                this.handleSSEMessage(data);
+            }
+        });
+
+        console.log(`🔌 SSE inicializado para plug ${this.plugData.device_name} (${this.plugData.shelly_device_id})`);
+    }
+
+    /**
      * Limpia el Intersection Observer
      */
     cleanupVisibilityObserver() {
@@ -1221,7 +1259,7 @@ class PlugCard extends HTMLElement {
             return;
         }
 
-        try {
+        try { 
             // Generar configuración en el formato esperado por el backend
             const config = this.generateAutomationConfig();
             

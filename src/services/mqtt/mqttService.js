@@ -4,13 +4,18 @@ const configLoader = require('../../utils/configLoader');
 
 class MqttService {
   constructor() {
+    // Singleton pattern - return existing instance if it exists
+    if (MqttService.instance) {
+      return MqttService.instance;
+    }
+
     this.client = null;
     this.isConnected = false;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
     this.reconnectInterval = 1000; // 1 segundo inicial
     this.messageHandlers = [];
-    
+
     // Topics estáticos que siempre se suscriben
     this.staticTopics = [
       '#'
@@ -18,10 +23,10 @@ class MqttService {
       // 'ConsumCups/+',         // Datos de consumo por CUPS
       // '+/ES+/#'               // Cualquier prefijo + CUPS español (acs, endoll1, enchufe23, etc.)
     ];
-    
+
     this.dynamicTopics = [];
     this.subscribedTopics = new Set();
-    
+
     // Estadísticas
     this.stats = {
       messagesReceived: 0,
@@ -29,9 +34,12 @@ class MqttService {
       lastMessageTime: null,
       startTime: Date.now()
     };
-    
+
     // Configurar estadísticas cada segundo
     this.setupStatsInterval();
+
+    // Store the singleton instance
+    MqttService.instance = this;
   }
 
   /**
@@ -231,6 +239,7 @@ class MqttService {
    * Maneja los mensajes MQTT recibidos
    */
   handleMessage(topic, message) {
+    
     try {
       // Actualizar estadísticas
       this.stats.messagesReceived++;

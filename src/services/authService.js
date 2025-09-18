@@ -118,6 +118,20 @@ class AuthService {
         throw error;
       }
 
+      // Verificar si tiene password temporal
+      if (user.password_hash && user.password_hash.startsWith('tmp-')) {
+        const error = new Error('Password inicial requerida');
+        error.code = 'PASSWORD_NOT_SET';
+        throw error;
+      }
+
+      // Verificar si tiene CUPS asignado (solo para usuarios normales, no admins)
+      if (user.role !== 'admin' && !user.cups) {
+        const error = new Error('CUPS no asignado');
+        error.code = 'CUPS_NOT_ASSIGNED';
+        throw error;
+      }
+
       // Generar tokens
       const accessToken = this.generateJWT(user);
       const refreshToken = this.generateRefreshToken(user);
@@ -235,14 +249,27 @@ class AuthService {
       // Enviar email de bienvenida
       await emailService.sendWelcomeEmail(user);
 
+      // Determinar el siguiente paso en el flujo
+      let nextStep = 'LOGIN_READY';
+
+      // Primera validación: ¿Tiene password temporal?
+      if (user.password_hash && user.password_hash.startsWith('tmp-')) {
+        nextStep = 'SET_PASSWORD';
+      } else if (user.role !== 'admin' && !user.cups) {
+        // Segunda validación: ¿Tiene CUPS asignado? (solo para usuarios normales, no admins)
+        nextStep = 'ASSIGN_CUPS';
+      }
+
       logger.info('Email verificado exitosamente', { 
         userId: user.id, 
-        email: user.email 
+        email: user.email,
+        nextStep
       });
 
       return {
         user: user.toJSON(),
-        message: 'Email verificado exitosamente'
+        message: 'Email verificado exitosamente',
+        nextStep
       };
     } catch (error) {
       logger.error('Error verificando email:', error);
@@ -431,6 +458,49 @@ class AuthService {
       };
     } catch (error) {
       logger.error('Error cambiando password:', error);
+      throw error;
+    }
+  }
+
+  // Establecer password inicial (para usuarios creados por admin)
+  async setInitialPassword(token, newPassword) {
+    try {
+      const user = await User.findByEmailVerificationToken(token);
+      if (!user) {
+        throw new Error('Token de verificació invàlid o caducat');
+      }
+
+      // Verificar que el usuario tiene email verificado
+      if (!user.email_validated) {
+        throw new Error('Email no verificat');
+      }
+
+      // Verificar que tiene password temporal
+      if (!user.password_hash || !user.password_hash.startsWith('tmp-')) {
+        throw new Error('Aquest usuari ja té una contrasenya establerta');
+      }
+
+      // Actualizar password
+      await user.updatePassword(newPassword);
+
+      // Generar tokens para login automático
+      const accessToken = this.generateJWT(user);
+      const refreshToken = this.generateRefreshToken(user);
+
+      logger.info('Password inicial establecido exitosamente', { 
+        userId: user.id, 
+        email: user.email 
+      });
+
+      return {
+        user: user.toJSON(),
+        accessToken,
+        refreshToken,
+        expiresIn: this.jwtExpiresIn,
+        message: 'Contraseña establecida exitosamente'
+      };
+    } catch (error) {
+      logger.error('Error estableciendo password inicial:', error);
       throw error;
     }
   }

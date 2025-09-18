@@ -3,6 +3,10 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { sanitizeInput } = require('../middleware/validation');
 const database = require('../utils/database');
 const logger = require('../utils/logger');
+const User = require('../models/User');
+const CupsService = require('../services/cupsService');
+const emailService = require('../services/emailService');
+const crypto = require('crypto');
 
 const router = express.Router();
 
@@ -654,6 +658,167 @@ router.get('/stats',
       });
     } catch (error) {
       logger.error('Error obteniendo estadísticas para admin:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor'
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/admin/register:
+ *   post:
+ *     summary: Registrar nuevo usuario (solo admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - cups
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Nombre del usuario
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Email del usuario
+ *               cups:
+ *                 type: string
+ *                 description: CUPS a asignar al usuario
+ *     responses:
+ *       201:
+ *         description: Usuario creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *                 device:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Datos inválidos o usuario/CUPS ya existe
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: No autorizado (no es admin)
+ */
+router.post('/register',
+  authenticateToken,
+  requireAdmin,
+  sanitizeInput,
+  async (req, res) => {
+    try {
+      const { name, email, cups } = req.body;
+
+      // Validar campos requeridos
+      if (!name || !email || !cups) {
+        return res.status(400).json({
+          success: false,
+          error: 'Faltan campos requeridos: name, email, cups'
+        });
+      }
+
+      // Validar formato de email básico
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Formato de email inválido'
+        });
+      }
+
+      // Verificar si el usuario ya existe
+      const existingUser = await User.findByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          error: 'Ya existe un usuario con este email'
+        });
+      }
+
+      // Verificar si el CUPS ya está asignado
+      const existingCups = await CupsService.getCupsInfo(cups);
+      if (existingCups && existingCups.is_assigned) {
+        return res.status(400).json({
+          success: false,
+          error: 'Este CUPS ya está asignado a otro usuario'
+        });
+      }
+
+      // Generar password temporal
+      const tempPasswordHash = 'tmp-' + crypto.randomBytes(16).toString('hex');
+
+      // Crear el usuario con password temporal
+      const user = await User.create({
+        email: email.toLowerCase().trim(),
+        name: name.trim(),
+        password: tempPasswordHash, // Esto será hasheado por el modelo
+        role: 'user',
+        email_validated: false,
+        cups: cups.trim()
+      });
+
+      // Asignar el CUPS y crear el device
+      const deviceResult = await CupsService.assignCups(
+        cups.trim(),
+        req.user.userId, // Admin que hace la asignación
+        'admin',
+        user.id // Usuario objetivo
+      );
+
+      // Generar token de verificación de email
+      const verificationToken = await user.generateEmailVerificationToken();
+
+      // Enviar email de activación
+      await emailService.sendEmailVerification(user, verificationToken);
+
+      logger.info('Usuario creado por admin exitosamente', {
+        adminId: req.user.userId,
+        newUserId: user.id,
+        email: user.email,
+        cups: cups.trim()
+      });
+
+      res.status(201).json({
+        success: true,
+        user: user.toJSON(),
+        device: deviceResult.device,
+        message: 'Usuario creado exitosamente. Se ha enviado un email de activación.'
+      });
+
+    } catch (error) {
+      logger.error('Error en registro por admin:', error);
+      
+      if (error.message.includes('Ya existe un usuario')) {
+        return res.status(400).json({
+          success: false,
+          error: error.message
+        });
+      }
+
+      if (error.message.includes('CUPS')) {
+        return res.status(400).json({
+          success: false,
+          error: error.message
+        });
+      }
+
       res.status(500).json({
         success: false,
         error: 'Error interno del servidor'

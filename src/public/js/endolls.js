@@ -152,7 +152,6 @@ class EndollsManager {
                 // Escuchar eventos del web component
                 plugCard.addEventListener('plug-toggled', this.handlePlugToggled.bind(this));
                 plugCard.addEventListener('plug-error', this.handlePlugError.bind(this));
-                plugCard.addEventListener('plug-sse-update', this.handlePlugSSEUpdate.bind(this));
                 
                 // Registrar el plug card en el mapa para distribución SSE
                 this.plugCards.set(plug.shelly_device_id, plugCard);
@@ -160,8 +159,6 @@ class EndollsManager {
                 this.elements.plugsContainer.appendChild(plugCard);
             });
             
-            // Conectar SSE después de renderizar los plugs
-            this.connectSSE();
         }
     }
 
@@ -392,116 +389,6 @@ class EndollsManager {
         await this.loadUserPlugs();
     }
 
-    /**
-     * Conecta SSE para recibir mensajes MQTT en tiempo real
-     */
-    connectSSE() {
-        if (this.sseManager) {
-            console.log('🔌 SSE ya está conectado, desconectando primero...');
-            this.disconnectSSE();
-        }
-
-        if (this.plugCards.size === 0) {
-            console.log('⚠️ No hay plug cards para conectar SSE');
-            return;
-        }
-
-        console.log(`🔌 Conectando SSE para ${this.plugCards.size} plugs...`);
-        
-        this.sseManager = new SSEManager();
-        this.sseManager.connect("/api/sse/plugs", this.handleSSEMessage.bind(this));
-        
-        console.log('✅ SSE conectado para plugs');
-    }
-
-    /**
-     * Desconecta SSE
-     */
-    disconnectSSE() {
-        if (this.sseManager) {
-            console.log('🔌 Desconectando SSE...');
-            this.sseManager.disconnect();
-            this.sseManager = null;
-            console.log('✅ SSE desconectado');
-        }
-    }
-
-    /**
-     * Maneja mensajes SSE y los distribuye a los plug-cards correspondientes
-     * @param {Object} data - Datos del mensaje SSE
-     */
-    handleSSEMessage(data) {
-        try {
-            // Verificar que el mensaje tiene la estructura esperada
-            if (!data || !data.topic || !data.payload) {
-                return;
-            }
-
-            // Mensaje de conexión establecida
-            if (data.type === 'connection_established') {
-                console.log('🎉 SSE conexión establecida:', data.message);
-                console.log(`📊 Filtrando mensajes para ${data.filterCount} dispositivos`);
-                return;
-            }
-
-            // Extraer shelly_device_id del topic
-            // Formato esperado: "endoll1/ES0031446458360006JY0F/status/switch:0"
-            const topicParts = data.topic.split('/');
-            if (topicParts.length < 2) {
-                console.warn('⚠️ Formato de topic inesperado:', data.topic);
-                return;
-            }
-
-            const shellyDeviceId = topicParts[1]; // ES0031446458360006JY0F
-            
-            // Buscar el plug-card correspondiente
-            const plugCard = this.plugCards.get(shellyDeviceId);
-            if (!plugCard) {
-                // Esto es normal, el mensaje puede ser para un dispositivo de otro usuario
-                return;
-            }
-
-            // Distribuir el mensaje al plug-card correspondiente
-            plugCard.handleSSEMessage(data);
-
-        } catch (error) {
-            console.error('❌ Error procesando mensaje SSE en EndollsManager:', error, data);
-        }
-    }
-
-    /**
-     * Maneja eventos de actualización SSE de los plug-cards
-     * @param {CustomEvent} event - Evento emitido por un plug-card
-     */
-    handlePlugSSEUpdate(event) {
-        const { plugName, isOnline, isOn, power } = event.detail;
-        
-        // Log de cambios significativos para debugging
-        console.log(`🔄 SSE Update: ${plugName} - Online: ${isOnline}, On: ${isOn}, Power: ${power}W`);
-        
-        // Aquí se pueden agregar acciones adicionales como:
-        // - Actualizar estadísticas globales
-        // - Emitir eventos a otros componentes
-        // - Actualizar gráficas en tiempo real
-        // - etc.
-    }
-
-    /**
-     * Obtiene el estado de la conexión SSE
-     */
-    getSSEConnectionState() {
-        if (!this.sseManager) {
-            return 'DISCONNECTED';
-        }
-        return this.sseManager.getConnectionState();
-    }
-
-    /**
-     * Verifica si SSE está conectado
-     */
-    isSSEConnected() {
-        return this.sseManager && this.sseManager.isConnectedToEndpoint();
-    }
 }
 
 // Crear instancia global

@@ -1,11 +1,28 @@
 const express = require('express');
 const router = express.Router();
 const PlugsService = require('../services/plugsService');
+const AutomationManager = require('../services/automation/AutomationManager');
 const { authenticateToken } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 // Instancia del servicio
 const plugsService = new PlugsService();
+
+// Asegurar que el PlugsService use la instancia singleton del AutomationManager
+(async () => {
+  try {
+    // Obtener la instancia singleton del AutomationManager
+    const automationManager = AutomationManager.getInstance();
+    
+    // Actualizar la referencia en el PlugsService si no está ya configurada
+    if (!plugsService.automationManager) {
+      plugsService.automationManager = automationManager;
+      logger.info('✅ AutomationManager singleton asignado a PlugsService de las rutas');
+    }
+  } catch (error) {
+    logger.warn('⚠️ No se pudo asignar AutomationManager singleton a PlugsService de las rutas:', error.message);
+  }
+})();
 
 /**
  * @swagger

@@ -1,31 +1,97 @@
 /**
  * SSEManager - Gestor independiente de conexiones Server-Sent Events
  * Permite conectar a cualquier endpoint SSE con callbacks personalizados
+ * Implementa patrón singleton por endpoint para reutilizar conexiones
  */
 class SSEManager {
-    constructor() {
-        this.eventSource = null;
-        this.isConnected = false;
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 1000; // 1 segundo inicial
-        this.currentEndpoint = null;
-        this.currentCallback = null;
+    // Registro estático de conexiones por endpoint
+    static connections = new Map();
+
+    constructor(endpoint) {
+        this.endpoint = endpoint;
+        this.callbacks = new Set();
+
+        // Si no existe conexión para este endpoint, crearla
+        if (!SSEManager.connections.has(endpoint)) {
+            SSEManager.createConnection(endpoint);
+        }
+
+        // Registrar esta instancia en la conexión
+        SSEManager.connections.get(endpoint).instances.add(this);
     }
 
     /**
-     * Conecta a un endpoint SSE específico con un callback personalizado
-     * @param {string} endpoint - El endpoint SSE (ej: '/api/sse/time')
+     * Agrega un callback para recibir datos de este endpoint
      * @param {function} callback - Función que se ejecuta cuando se reciben datos
-     * @param {object} options - Opciones adicionales
+     * @param {*} reg - Parámetro opcional (mantenido por compatibilidad)
      */
-    connect(endpoint, callback, options = {}) {
-        if (this.eventSource) {
-            this.disconnect();
+    addCallback(callback, reg = null) {
+        if (typeof callback !== 'function') {
+            console.error('❌ SSEManager: El callback debe ser una función');
+            return;
         }
 
-        this.currentEndpoint = endpoint;
-        this.currentCallback = callback;
+        this.callbacks.add(callback);
+        const connection = SSEManager.connections.get(this.endpoint);
+        if (connection) {
+            connection.callbacks.add(callback);
+            console.log(`📝 SSEManager: Callback agregado para ${this.endpoint}. Total callbacks: ${connection.callbacks.size}`);
+        }
+    }
+
+    /**
+     * Remueve un callback específico
+     * @param {function} callback - El callback a remover
+     */
+    removeCallback(callback) {
+        this.callbacks.delete(callback);
+        const connection = SSEManager.connections.get(this.endpoint);
+        if (connection) {
+            connection.callbacks.delete(callback);
+            console.log(`🗑️ SSEManager: Callback removido para ${this.endpoint}. Total callbacks: ${connection.callbacks.size}`);
+        }
+    }
+
+    /**
+     * Remueve todos los callbacks de esta instancia
+     */
+    removeAllCallbacks() {
+        const connection = SSEManager.connections.get(this.endpoint);
+        if (connection) {
+            this.callbacks.forEach(callback => {
+                connection.callbacks.delete(callback);
+            });
+            this.callbacks.clear();
+            console.log(`🗑️ SSEManager: Todos los callbacks removidos para ${this.endpoint}. Total callbacks restantes: ${connection.callbacks.size}`);
+        }
+    }
+
+    /**
+     * Crea una nueva conexión para un endpoint específico
+     * @param {string} endpoint - El endpoint SSE
+     */
+    static createConnection(endpoint) {
+        const connection = {
+            eventSource: null,
+            callbacks: new Set(),
+            instances: new Set(),
+            isConnected: false,
+            reconnectAttempts: 0,
+            maxReconnectAttempts: 5,
+            reconnectDelay: 1000
+        };
+
+        SSEManager.connections.set(endpoint, connection);
+        SSEManager.establishConnection(endpoint);
+    }
+
+    /**
+     * Establece la conexión EventSource para un endpoint
+     * @param {string} endpoint - El endpoint SSE
+     */
+    static establishConnection(endpoint) {
+        const connection = SSEManager.connections.get(endpoint);
+        if (!connection) return;
 
         try {
             // Obtener token de autenticación si está disponible
@@ -38,57 +104,70 @@ class SSEManager {
                 }
             }
 
-            console.log('🔌 SSEManager: Conectando a endpoint:', endpoint);
+            console.log('🔌 SSEManager: Creando conexión para endpoint:', endpoint);
             console.log('🔗 SSEManager: URL completa:', sseUrl);
-            
-            this.eventSource = new EventSource(sseUrl);
+
+            connection.eventSource = new EventSource(sseUrl);
 
             // Evento cuando se recibe un mensaje
-            this.eventSource.onmessage = (event) => {
+            connection.eventSource.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     console.log('📨 SSEManager: Datos recibidos de', endpoint, ':', data);
-                    
-                    if (this.currentCallback && typeof this.currentCallback === 'function') {
-                        this.currentCallback(data);
-                    }
-                    
-                    this.isConnected = true;
-                    this.reconnectAttempts = 0; // Reset contador de reconexión
+
+                    // Ejecutar todos los callbacks registrados para este endpoint
+                    connection.callbacks.forEach(callback => {
+                        if (typeof callback === 'function') {
+                            try {
+                                callback(data);
+                            } catch (error) {
+                                console.error('❌ SSEManager: Error ejecutando callback:', error);
+                            }
+                        }
+                    });
+
+                    connection.isConnected = true;
+                    connection.reconnectAttempts = 0; // Reset contador de reconexión
                 } catch (error) {
                     console.error('❌ SSEManager: Error procesando mensaje:', error);
                     console.log('📄 SSEManager: Datos brutos recibidos:', event.data);
-                    
+
                     // Si no es JSON válido, pasar los datos tal como están
-                    if (this.currentCallback && typeof this.currentCallback === 'function') {
-                        this.currentCallback(event.data);
-                    }
+                    connection.callbacks.forEach(callback => {
+                        if (typeof callback === 'function') {
+                            try {
+                                callback(event.data);
+                            } catch (error) {
+                                console.error('❌ SSEManager: Error ejecutando callback con datos brutos:', error);
+                            }
+                        }
+                    });
                 }
             };
 
             // Evento cuando se abre la conexión
-            this.eventSource.onopen = (event) => {
+            connection.eventSource.onopen = (event) => {
                 console.log('✅ SSEManager: Conexión establecida con', endpoint);
-                console.log('📊 SSEManager: Estado de conexión:', this.eventSource.readyState);
-                this.isConnected = true;
-                this.reconnectAttempts = 0;
+                console.log('📊 SSEManager: Estado de conexión:', connection.eventSource.readyState);
+                connection.isConnected = true;
+                connection.reconnectAttempts = 0;
             };
 
             // Evento cuando hay un error
-            this.eventSource.onerror = (event) => {
+            connection.eventSource.onerror = (event) => {
                 console.error('❌ SSEManager: Error en conexión con', endpoint, ':', event);
-                console.log('📊 SSEManager: Estado de conexión:', this.eventSource.readyState);
-                
-                this.isConnected = false;
-                
+                console.log('📊 SSEManager: Estado de conexión:', connection.eventSource.readyState);
+
+                connection.isConnected = false;
+
                 // Verificar el estado de la conexión
-                if (this.eventSource.readyState === EventSource.CLOSED) {
+                if (connection.eventSource.readyState === EventSource.CLOSED) {
                     console.log('🔒 SSEManager: Conexión cerrada por el servidor');
                 }
-                
+
                 // Intentar reconexión automática solo si no está cerrada permanentemente
-                if (this.reconnectAttempts < this.maxReconnectAttempts && this.eventSource.readyState !== EventSource.CLOSED) {
-                    this.scheduleReconnect();
+                if (connection.reconnectAttempts < connection.maxReconnectAttempts && connection.eventSource.readyState !== EventSource.CLOSED) {
+                    SSEManager.scheduleReconnect(endpoint);
                 } else {
                     console.error('🚫 SSEManager: Máximo número de intentos de reconexión alcanzado o conexión cerrada');
                 }
@@ -100,33 +179,56 @@ class SSEManager {
     }
 
     /**
-     * Programa una reconexión automática
+     * Programa una reconexión automática para un endpoint
+     * @param {string} endpoint - El endpoint SSE
      */
-    scheduleReconnect() {
-        this.reconnectAttempts++;
-        const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1); // Backoff exponencial
-        
-        console.log(`🔄 SSEManager: Intentando reconexión en ${delay}ms (intento ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-        
+    static scheduleReconnect(endpoint) {
+        const connection = SSEManager.connections.get(endpoint);
+        if (!connection) return;
+
+        connection.reconnectAttempts++;
+        const delay = connection.reconnectDelay * Math.pow(2, connection.reconnectAttempts - 1); // Backoff exponencial
+
+        console.log(`🔄 SSEManager: Intentando reconexión para ${endpoint} en ${delay}ms (intento ${connection.reconnectAttempts}/${connection.maxReconnectAttempts})`);
+
         setTimeout(() => {
-            if (this.currentEndpoint && this.currentCallback) {
-                this.connect(this.currentEndpoint, this.currentCallback);
+            if (SSEManager.connections.has(endpoint)) {
+                SSEManager.establishConnection(endpoint);
             }
         }, delay);
     }
 
+
+
     /**
-     * Desconecta del endpoint SSE
+     * Desconecta esta instancia del endpoint SSE
+     * Solo cierra la conexión real si no quedan otras instancias
      */
     disconnect() {
-        if (this.eventSource) {
-            console.log('🔌 SSEManager: Desconectando de', this.currentEndpoint);
-            this.eventSource.close();
-            this.eventSource = null;
-            this.isConnected = false;
-            this.currentEndpoint = null;
-            this.currentCallback = null;
+        this.removeAllCallbacks();
+
+        const connection = SSEManager.connections.get(this.endpoint);
+        if (connection) {
+            connection.instances.delete(this);
+
+            // Si no quedan instancias, cerrar la conexión real
+            if (connection.instances.size === 0) {
+                if (connection.eventSource) {
+                    console.log('🔌 SSEManager: Cerrando conexión real para', this.endpoint, '(sin instancias activas)');
+                    connection.eventSource.close();
+                }
+                SSEManager.connections.delete(this.endpoint);
+            } else {
+                console.log(`� SSEManager: Instancia desconectada de ${this.endpoint}. Instancias restantes: ${connection.instances.size}`);
+            }
         }
+    }
+
+    /**
+     * Destruye completamente esta instancia (alias de disconnect para claridad)
+     */
+    destroy() {
+        this.disconnect();
     }
 
     /**
@@ -134,7 +236,7 @@ class SSEManager {
      */
     reconnect() {
         if (this.currentEndpoint && this.currentCallback) {
-            console.log('🔄 SSEManager: Reconexión manual solicitada');
+            console.log('� SSEManager: Reconexión manual solicitada');
             this.connect(this.currentEndpoint, this.currentCallback);
         } else {
             console.warn('⚠️ SSEManager: No hay endpoint o callback configurado para reconectar');
@@ -142,12 +244,13 @@ class SSEManager {
     }
 
     /**
-     * Obtiene el estado de la conexión
+     * Obtiene el estado de la conexión para este endpoint
      */
     getConnectionState() {
-        if (!this.eventSource) return 'CLOSED';
-        
-        switch (this.eventSource.readyState) {
+        const connection = SSEManager.connections.get(this.endpoint);
+        if (!connection || !connection.eventSource) return 'CLOSED';
+
+        switch (connection.eventSource.readyState) {
             case EventSource.CONNECTING:
                 return 'CONNECTING';
             case EventSource.OPEN:
@@ -160,10 +263,56 @@ class SSEManager {
     }
 
     /**
-     * Verifica si está conectado
+     * Verifica si está conectado al endpoint
      */
     isConnectedToEndpoint() {
-        return this.isConnected && this.eventSource && this.eventSource.readyState === EventSource.OPEN;
+        const connection = SSEManager.connections.get(this.endpoint);
+        return connection && connection.isConnected && connection.eventSource && connection.eventSource.readyState === EventSource.OPEN;
+    }
+
+    /**
+     * Obtiene información sobre la conexión compartida
+     */
+    getConnectionInfo() {
+        const connection = SSEManager.connections.get(this.endpoint);
+        if (!connection) {
+            return {
+                endpoint: this.endpoint,
+                exists: false
+            };
+        }
+
+        return {
+            endpoint: this.endpoint,
+            exists: true,
+            isConnected: connection.isConnected,
+            state: this.getConnectionState(),
+            totalInstances: connection.instances.size,
+            totalCallbacks: connection.callbacks.size,
+            reconnectAttempts: connection.reconnectAttempts
+        };
+    }
+
+    /**
+     * Obtiene estadísticas globales de todas las conexiones
+     */
+    static getGlobalStats() {
+        const stats = {
+            totalConnections: SSEManager.connections.size,
+            connections: []
+        };
+
+        for (const [endpoint, connection] of SSEManager.connections) {
+            stats.connections.push({
+                endpoint,
+                isConnected: connection.isConnected,
+                instances: connection.instances.size,
+                callbacks: connection.callbacks.size,
+                reconnectAttempts: connection.reconnectAttempts
+            });
+        }
+
+        return stats;
     }
 
     /**
