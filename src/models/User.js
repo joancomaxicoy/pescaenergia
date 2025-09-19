@@ -13,6 +13,7 @@ class User {
     this.role = userData.role;
     this.google_id = userData.google_id;
     this.email_validated = userData.email_validated;
+    this.is_temp_password = userData.is_temp_password;
     this.email_verification_token = userData.email_verification_token;
     this.email_verification_expires = userData.email_verification_expires;
     this.password_reset_token = userData.password_reset_token;
@@ -41,12 +42,12 @@ class User {
 
       const query = `
         INSERT INTO users (
-          cups, email, name, password_hash, role, google_id, email_validated
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          cups, email, name, password_hash, role, google_id, email_validated, is_temp_password
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
       `;
 
-      const values = [cups, email, name, password_hash, role, google_id, email_validated];
+      const values = [cups, email, name, password_hash, role, google_id, email_validated, false];
       const result = await database.query(query, values);
 
       logger.info('Usuario creado', { userId: result.rows[0].id, email });
@@ -315,6 +316,7 @@ class User {
         SET password_hash = $1, 
             password_reset_token = NULL, 
             password_reset_expires = NULL,
+            is_temp_password = false,
             updated_at = NOW()
         WHERE id = $2
         RETURNING *
@@ -326,6 +328,7 @@ class User {
         this.password_hash = password_hash;
         this.password_reset_token = null;
         this.password_reset_expires = null;
+        this.is_temp_password = false;
         this.updated_at = result.rows[0].updated_at;
       }
 
@@ -333,6 +336,39 @@ class User {
       return true;
     } catch (error) {
       logger.error('Error actualizando password:', error);
+      throw error;
+    }
+  }
+
+  // Crear usuario con password temporal
+  static async createWithTempPassword(userData) {
+    try {
+      const {
+        cups = null,
+        email,
+        name,
+        role = 'user',
+        google_id = null,
+        email_validated = false
+      } = userData;
+
+      // Generar password temporal sin hashear
+      const tempPassword = 'tmp-' + crypto.randomBytes(16).toString('hex');
+
+      const query = `
+        INSERT INTO users (
+          cups, email, name, password_hash, role, google_id, email_validated, is_temp_password
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *
+      `;
+
+      const values = [cups, email, name, tempPassword, role, google_id, email_validated, true];
+      const result = await database.query(query, values);
+
+      logger.info('Usuario creado con password temporal', { userId: result.rows[0].id, email });
+      return new User(result.rows[0]);
+    } catch (error) {
+      logger.error('Error creando usuario con password temporal:', error);
       throw error;
     }
   }

@@ -761,14 +761,10 @@ router.post('/register',
         });
       }
 
-      // Generar password temporal
-      const tempPasswordHash = 'tmp-' + crypto.randomBytes(16).toString('hex');
-
       // Crear el usuario con password temporal
-      const user = await User.create({
+      const user = await User.createWithTempPassword({
         email: email.toLowerCase().trim(),
         name: name.trim(),
-        password: tempPasswordHash, // Esto será hasheado por el modelo
         role: 'user',
         email_validated: false,
         cups: cups.trim()

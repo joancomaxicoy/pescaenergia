@@ -138,11 +138,8 @@ class ScheduleEvaluator {
   getCurrentTimeInUserTimezone() {
     try {
       const now = new Date();
-      
-      if (this.userTimezone === 'Europe/Madrid') {
-        return now;
-      }
 
+      // Usar Intl.DateTimeFormat para convertir UTC a la zona horaria del usuario
       const timeInUserTz = new Intl.DateTimeFormat('en-CA', {
         timeZone: this.userTimezone,
         year: 'numeric',
@@ -161,7 +158,16 @@ class ScheduleEvaluator {
       const minute = parseInt(timeInUserTz.find(part => part.type === 'minute').value);
       const second = parseInt(timeInUserTz.find(part => part.type === 'second').value);
 
-      return new Date(year, month, day, hour, minute, second);
+      const userTime = new Date(year, month, day, hour, minute, second);
+
+      logger.debug('Conversión de timezone realizada', {
+        utcTime: now.toISOString(),
+        userTimezone: this.userTimezone,
+        userTime: userTime.toISOString(),
+        offset: (userTime.getTime() - now.getTime()) / (1000 * 60) + ' minutos'
+      });
+
+      return userTime;
 
     } catch (error) {
       logger.error('Error obteniendo tiempo en timezone del usuario', {

@@ -117,10 +117,7 @@ class DashboardBase {
         // Limpiar intervalos
         this.clearAutoRefresh();
         
-        // Mostrar mensaje de confirmación
-        if (confirm('Estàs segur que vols tancar la sessió?')) {
-            window.apiClient.logout();
-        }
+        window.apiClient.logout();
     }
 
     /**

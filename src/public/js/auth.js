@@ -1,88 +1,170 @@
 // Global authentication utilities
 class AuthManager {
     constructor() {
-        this.googleAuthReady = false;
         this.setupDropdownHandlers();
-        this.waitForGoogleAndInitialize();
+        this.setupForgotPasswordModal();
     }
 
-    // Wait for Google library to load and then initialize
-    async waitForGoogleAndInitialize() {
-        const maxAttempts = 20; // 10 segundos máximo
-        let attempts = 0;
-        
-        const checkGoogle = () => {
-            attempts++;
-            
-            if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
-                console.log('Google Sign-In library cargada correctamente');
-                this.initializeGoogleAuth();
-                return;
+    // Setup forgot password modal functionality
+    setupForgotPasswordModal() {
+        document.addEventListener('DOMContentLoaded', () => {
+            const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+            const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+            const closeForgotModal = document.getElementById('closeForgotModal');
+            const cancelForgotBtn = document.getElementById('cancelForgotBtn');
+            const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+
+            // Show modal when forgot password link is clicked
+            if (forgotPasswordLink) {
+                forgotPasswordLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.showForgotPasswordModal();
+                });
             }
-            
-            if (attempts >= maxAttempts) {
-                console.error('Timeout esperando Google Sign-In library');
-                return;
+
+            // Close modal handlers
+            if (closeForgotModal) {
+                closeForgotModal.addEventListener('click', () => {
+                    this.hideForgotPasswordModal();
+                });
             }
-            
-            console.log(`Esperando Google Sign-In library... intento ${attempts}/${maxAttempts}`);
-            setTimeout(checkGoogle, 500);
-        };
-        
-        checkGoogle();
+
+            if (cancelForgotBtn) {
+                cancelForgotBtn.addEventListener('click', () => {
+                    this.hideForgotPasswordModal();
+                });
+            }
+
+            // Close modal when clicking outside
+            if (forgotPasswordModal) {
+                forgotPasswordModal.addEventListener('click', (e) => {
+                    if (e.target === forgotPasswordModal) {
+                        this.hideForgotPasswordModal();
+                    }
+                });
+            }
+
+            // Handle forgot password form submission
+            if (forgotPasswordForm) {
+                forgotPasswordForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.handleForgotPasswordSubmit();
+                });
+            }
+        });
     }
 
-    // Initialize Google Sign-In
-    async initializeGoogleAuth() {
-        try {
-            const clientId = this.getGoogleClientId();
-            if (!clientId) {
-                console.error('No se puede inicializar Google Auth: Client ID no disponible');
-                return;
+    // Show forgot password modal
+    showForgotPasswordModal() {
+        const modal = document.getElementById('forgotPasswordModal');
+        const emailInput = document.getElementById('forgotEmail');
+        
+        if (modal) {
+            modal.style.display = 'flex';
+            // Clear previous values and errors
+            if (emailInput) {
+                emailInput.value = '';
+                emailInput.classList.remove('error');
             }
-            
-            await google.accounts.id.initialize({
-                client_id: clientId,
-                callback: this.handleGoogleResponse.bind(this)
-            });
-            
-            this.googleAuthReady = true;
-            console.log('Google Auth inicializado correctamente');
-        } catch (error) {
-            console.error('Error initializing Google Auth:', error);
+            this.clearForgotPasswordErrors();
         }
     }
 
-    // Get Google Client ID from environment or meta tag
-    getGoogleClientId() {
-        const metaTag = document.querySelector('meta[name="google-client-id"]');
-        const clientId = metaTag ? metaTag.content : null;
-        
-        if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID') {
-            console.error('Google Client ID no configurado correctamente');
-            return null;
+    // Hide forgot password modal
+    hideForgotPasswordModal() {
+        const modal = document.getElementById('forgotPasswordModal');
+        if (modal) {
+            modal.style.display = 'none';
         }
-        
-        console.log('Google Client ID encontrado:', clientId.substring(0, 20) + '...');
-        return clientId;
     }
 
-    // Handle Google authentication response
-    async handleGoogleResponse(response) {
-        console.log('Respuesta de Google recibida:', response);
+    // Handle forgot password form submission
+    async handleForgotPasswordSubmit() {
+        const emailInput = document.getElementById('forgotEmail');
+        const sendResetBtn = document.getElementById('sendResetBtn');
+        const forgotLoading = document.getElementById('forgotLoading');
+        const btnText = sendResetBtn.querySelector('.btn-text');
+
+        const email = emailInput.value.trim();
+
+        // Clear previous errors
+        this.clearForgotPasswordErrors();
+
+        // Validation
+        if (!email) {
+            this.showForgotPasswordError('forgotEmail', 'El correu electrònic és obligatori');
+            return;
+        }
+
+        if (!this.isValidEmail(email)) {
+            this.showForgotPasswordError('forgotEmail', 'Format de correu electrònic invàlid');
+            return;
+        }
+
+        // Show loading
+        sendResetBtn.disabled = true;
+        btnText.style.display = 'none';
+        forgotLoading.classList.remove('loading-hidden');
+
         try {
-            console.log('Procesando respuesta de Google...');
-            const result = await this.loginWithGoogle(response.credential);
+            const result = await this.forgotPassword(email);
+            
             if (result.success) {
-                console.log('Login con Google exitoso:', result.data.user);
-                this.handleAuthSuccess(result.data);
+                this.hideForgotPasswordModal();
+                this.showAlert('success', 'Si el correu existeix, rebràs un enllaç per restablir la contrasenya.');
             } else {
-                console.error('Error en login con Google:', result.error);
-                this.showAlert('error', result.error || 'Error amb l\'autenticació de Google');
+                this.showAlert('error', result.error || 'Error enviant el correu de recuperació');
             }
         } catch (error) {
-            console.error('Google auth error:', error);
-            this.showAlert('error', 'Error de connexió amb Google. Torna-ho a intentar.');
+            console.error('Forgot password error:', error);
+            this.showAlert('error', 'Error de connexió. Torna-ho a intentar.');
+        } finally {
+            // Hide loading
+            sendResetBtn.disabled = false;
+            btnText.style.display = 'inline';
+            forgotLoading.classList.add('loading-hidden');
+        }
+    }
+
+    // Show forgot password field error
+    showForgotPasswordError(fieldId, message) {
+        const errorEl = document.getElementById(fieldId + 'Error');
+        const inputEl = document.getElementById(fieldId);
+        
+        if (errorEl) errorEl.textContent = message;
+        if (inputEl) inputEl.classList.add('error');
+    }
+
+    // Clear forgot password errors
+    clearForgotPasswordErrors() {
+        const errorEl = document.getElementById('forgotEmailError');
+        const inputEl = document.getElementById('forgotEmail');
+        
+        if (errorEl) errorEl.textContent = '';
+        if (inputEl) inputEl.classList.remove('error');
+    }
+
+    // Forgot password API call
+    async forgotPassword(email) {
+        try {
+            const response = await fetch('/api/auth/forgot-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                return { success: true, data };
+            } else {
+                return { success: false, error: data.error };
+            }
+        } catch (error) {
+            console.error('Forgot password error:', error);
+            return { success: false, error: 'Error de connexió' };
         }
     }
 
@@ -134,29 +216,6 @@ class AuthManager {
         }
     }
 
-    // Login with Google
-    async loginWithGoogle(idToken) {
-        try {
-            const response = await fetch('/api/auth/google', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ idToken })
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                return { success: true, data };
-            } else {
-                return { success: false, error: data.error };
-            }
-        } catch (error) {
-            console.error('Google login error:', error);
-            return { success: false, error: 'Error de connexió' };
-        }
-    }
 
     // Handle successful authentication
     handleAuthSuccess(authData) {
@@ -164,6 +223,12 @@ class AuthManager {
         this.setAuthToken(authData.accessToken);
         if (authData.refreshToken) {
             this.setRefreshToken(authData.refreshToken);
+        }
+
+        // Check if user needs to set initial password
+        if (authData.user.is_temp_password) {
+            window.location.href = '/area-usuari/set-initial-password';
+            return;
         }
 
         // Check if user needs to assign CUPS
@@ -588,33 +653,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Google login buttons
-    const googleLoginBtn = document.getElementById('googleLoginBtn');
-    const googleRegisterBtn = document.getElementById('googleRegisterBtn');
-
-    if (googleLoginBtn) {
-        googleLoginBtn.addEventListener('click', function() {
-            if (authManager.googleAuthReady && typeof google !== 'undefined') {
-                google.accounts.id.prompt();
-            } else if (typeof google === 'undefined') {
-                authManager.showAlert('error', 'Google Sign-In no està disponible. Recarrega la pàgina i torna-ho a intentar.');
-            } else {
-                authManager.showAlert('error', 'Google Sign-In s\'està carregant. Espera uns segons i torna-ho a intentar.');
-            }
-        });
-    }
-
-    if (googleRegisterBtn) {
-        googleRegisterBtn.addEventListener('click', function() {
-            if (authManager.googleAuthReady && typeof google !== 'undefined') {
-                google.accounts.id.prompt();
-            } else if (typeof google === 'undefined') {
-                authManager.showAlert('error', 'Google Sign-In no està disponible. Recarrega la pàgina i torna-ho a intentar.');
-            } else {
-                authManager.showAlert('error', 'Google Sign-In s\'està carregant. Espera uns segons i torna-ho a intentar.');
-            }
-        });
-    }
 });
 
 // Helper functions

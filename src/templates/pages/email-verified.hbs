@@ -49,3 +49,43 @@
         {{/if}}
     </div>
 </div>
+
+{{#if success}}
+{{#if accessToken}}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-login with tokens from verification
+    const accessToken = '{{{accessToken}}}';
+    const refreshToken = '{{{refreshToken}}}';
+    const user = JSON.parse('{{{userJson}}}');
+
+    if (accessToken && user) {
+        // Store tokens
+        document.cookie = `authToken=${accessToken}; path=/; max-age=86400; SameSite=Strict`;
+        localStorage.setItem('authToken', accessToken);
+        
+        if (refreshToken) {
+            document.cookie = `refreshToken=${refreshToken}; path=/; max-age=604800; SameSite=Strict`;
+            localStorage.setItem('refreshToken', refreshToken);
+        }
+
+        // Redirect based on user state
+        setTimeout(() => {
+            // Check if user needs to set initial password
+            if (user.is_temp_password) {
+                window.location.href = '/area-usuari/set-initial-password';
+                return;
+            }
+
+            // Check if user needs to assign CUPS
+            if (!user.cups) {
+                window.location.href = '/area-usuari/assignar-cups';
+            } else {
+                window.location.href = '/area-usuari/dashboard';
+            }
+        }, 2000);
+    }
+});
+</script>
+{{/if}}
+{{/if}}

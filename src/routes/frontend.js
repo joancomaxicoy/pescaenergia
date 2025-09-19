@@ -242,23 +242,28 @@ router.get('/signin', (req, res) => {
 router.get('/verificar/:token', async (req, res) => {
     try {
         const { token } = req.params;
-        
+
         // Llamar al servicio de autenticación para verificar el email
         const authService = require('../services/authService');
         const result = await authService.verifyEmail(token);
-        
+
+        // Pasar tokens a la página para autologin
         res.render('pages/email-verified', {
             title: 'Email verificat',
             layout: 'main',
             showNavbar: false,
             showFooter: true,
             success: true,
-            message: 'El teu email ha estat verificat correctament. Ja pots iniciar sessió.'
+            message: 'El teu email ha estat verificat correctament. Iniciant sessió...',
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+            user: result.user,
+            userJson: JSON.stringify(result.user)
         });
-        
+
     } catch (error) {
         logger.error('Error verificando email:', error);
-        
+
         res.render('pages/email-verified', {
             title: 'Error de verificació',
             layout: 'main',
@@ -276,11 +281,11 @@ router.get('/verificar/:token', async (req, res) => {
 router.get('/reset-password/:token', async (req, res) => {
     try {
         const { token } = req.params;
-        
+
         // Verificar que el token sea válido
         const User = require('../models/User');
         const user = await User.findByPasswordResetToken(token);
-        
+
         if (!user) {
             return res.render('pages/password-reset-error', {
                 title: 'Error',
@@ -290,7 +295,7 @@ router.get('/reset-password/:token', async (req, res) => {
                 message: 'El enllaç de restabliment és invàlid o ha expirat.'
             });
         }
-        
+
         res.render('pages/password-reset', {
             title: 'Restablir contrasenya',
             layout: 'main',
@@ -298,10 +303,10 @@ router.get('/reset-password/:token', async (req, res) => {
             showFooter: true,
             token: token
         });
-        
+
     } catch (error) {
         logger.error('Error en reset password:', error);
-        
+
         res.render('pages/password-reset-error', {
             title: 'Error',
             layout: 'main',
@@ -310,6 +315,42 @@ router.get('/reset-password/:token', async (req, res) => {
             message: 'Error procesant la sol·licitud.'
         });
     }
+});
+
+/**
+ * Página para establecer contraseña inicial
+ */
+router.get('/set-initial-password', checkAuthFromCookie, requireAuth, (req, res) => {
+    // Verificar si el usuario tiene password temporal
+    if (!req.user.userData.is_temp_password) {
+        // Si no tiene password temporal, redirigir apropiadamente
+        if (!req.user.userData.cups) {
+            return res.redirect('/area-usuari/assignar-cups');
+        } else {
+            return res.redirect('/area-usuari/dashboard');
+        }
+    }
+
+    // Generar token para la API
+    const jwt = require('jsonwebtoken');
+    const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
+    const token = jwt.sign(
+        {
+            userId: req.user.userId,
+            type: 'set_initial_password'
+        },
+        jwtSecret,
+        { expiresIn: '1h' }
+    );
+
+    res.render('pages/set-initial-password', {
+        title: 'Establir Contrasenya',
+        layout: 'main',
+        showNavbar: false,
+        showFooter: true,
+        user: req.user.userData,
+        token: token
+    });
 });
 
 module.exports = router;

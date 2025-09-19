@@ -119,7 +119,7 @@ class AuthService {
       }
 
       // Verificar si tiene password temporal
-      if (user.password_hash && user.password_hash.startsWith('tmp-')) {
+      if (user.is_temp_password) {
         const error = new Error('Password inicial requerida');
         error.code = 'PASSWORD_NOT_SET';
         throw error;
@@ -249,27 +249,23 @@ class AuthService {
       // Enviar email de bienvenida
       await emailService.sendWelcomeEmail(user);
 
-      // Determinar el siguiente paso en el flujo
-      let nextStep = 'LOGIN_READY';
+      // Generar tokens automáticamente para autologin
+      const accessToken = this.generateJWT(user);
+      const refreshToken = this.generateRefreshToken(user);
 
-      // Primera validación: ¿Tiene password temporal?
-      if (user.password_hash && user.password_hash.startsWith('tmp-')) {
-        nextStep = 'SET_PASSWORD';
-      } else if (user.role !== 'admin' && !user.cups) {
-        // Segunda validación: ¿Tiene CUPS asignado? (solo para usuarios normales, no admins)
-        nextStep = 'ASSIGN_CUPS';
-      }
-
-      logger.info('Email verificado exitosamente', { 
-        userId: user.id, 
+      logger.info('Email verificado exitosamente - Autologin tokens generados', {
+        userId: user.id,
         email: user.email,
-        nextStep
+        hasTempPassword: user.is_temp_password,
+        hasCups: !!user.cups
       });
 
       return {
         user: user.toJSON(),
-        message: 'Email verificado exitosamente',
-        nextStep
+        accessToken,
+        refreshToken,
+        expiresIn: this.jwtExpiresIn,
+        message: 'Email verificado exitosamente'
       };
     } catch (error) {
       logger.error('Error verificando email:', error);
@@ -476,7 +472,7 @@ class AuthService {
       }
 
       // Verificar que tiene password temporal
-      if (!user.password_hash || !user.password_hash.startsWith('tmp-')) {
+      if (!user.is_temp_password) {
         throw new Error('Aquest usuari ja té una contrasenya establerta');
       }
 

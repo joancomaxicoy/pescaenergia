@@ -1105,6 +1105,37 @@ h1, h2, h3, h4, h5, h6, b {
     padding: 30px;
 }
 
+.modal-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: flex-end;
+    margin-top: 25px;
+}
+
+.modal-buttons .btn {
+    margin-bottom: 0;
+    min-width: 120px;
+}
+
+.close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    color: #666;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.close:hover {
+    color: #333;
+}
+
 .form-help {
     color: #666;
     font-size: 12px;
