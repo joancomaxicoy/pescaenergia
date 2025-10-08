@@ -133,7 +133,7 @@ class CupsService {
       const deviceInfoQuery = `
         SELECT d.*, u.name as user_name, u.email as user_email
         FROM devices d
-        JOIN users u ON d.user_id::uuid = u.id
+        JOIN users u ON d.user_id = u.id::text
         WHERE d.id = $1
       `;
       const deviceInfo = await client.query(deviceInfoQuery, [deviceId]);
@@ -202,7 +202,7 @@ class CupsService {
             ELSE true
           END as is_assigned
         FROM devices d
-        LEFT JOIN users u ON d.user_id != 'not_assigned' AND d.user_id::uuid = u.id
+        LEFT JOIN users u ON d.user_id != 'not_assigned' AND d.user_id = u.id::text
         WHERE d.shelly_device_id = $1 AND d.device_type = 'SHELLY_SHELLYEM'
       `;
 
@@ -245,7 +245,7 @@ class CupsService {
             ELSE true
           END as is_assigned
         FROM devices d
-        LEFT JOIN users u ON d.user_id != 'not_assigned' AND d.user_id::uuid = u.id
+        LEFT JOIN users u ON d.user_id != 'not_assigned' AND d.user_id = u.id::text
         WHERE d.device_type = 'SHELLY_SHELLYEM'
         ORDER BY d.created_at DESC
       `;

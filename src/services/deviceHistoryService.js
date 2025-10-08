@@ -681,7 +681,7 @@ class DeviceHistoryService {
             u.cups as user_cups,
             u.name as user_name
           FROM devices d
-          LEFT JOIN users u ON (d.user_id != 'not_assigned' AND d.user_id::uuid = u.id)
+          LEFT JOIN users u ON (d.user_id != 'not_assigned' AND d.user_id = u.id::text)
           WHERE d.id = $1::uuid
           LIMIT 1
         `;

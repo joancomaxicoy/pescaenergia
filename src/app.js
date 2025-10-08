@@ -52,6 +52,8 @@ class ExpressApp {
         }
       }
     }));
+
+    this.app.set('trust proxy', 1);
     this.app.set('view engine', 'hbs');
     this.app.set('views', path.join(__dirname, 'templates'));
 
@@ -83,7 +85,8 @@ class ExpressApp {
         'http://localhost:3000',
         'http://localhost:3001',
         'https://accounts.google.com',
-        'https://www.googleapis.com'
+        'https://www.googleapis.com',
+        'https://gestio.pescaenergia.cat'
       ],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
