@@ -52,7 +52,8 @@ class ExpressApp {
         }
       }
     }));
-    this.app.set('trust proxy', true);
+
+    this.app.set('trust proxy', 1);
     this.app.set('view engine', 'hbs');
     this.app.set('views', path.join(__dirname, 'templates'));
 

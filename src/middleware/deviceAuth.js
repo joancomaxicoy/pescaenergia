@@ -166,7 +166,7 @@ const getDeviceInfo = async (deviceId) => {
     const query = `
       SELECT d.*, u.email as user_email
       FROM devices d
-      LEFT JOIN users u ON d.user_id != 'not_assigned' AND d.user_id::uuid = u.id
+      LEFT JOIN users u ON d.user_id != 'not_assigned' AND d.user_id = u.id::text
       WHERE d.id::text = $1 OR d.shelly_device_id = $1
     `;
     

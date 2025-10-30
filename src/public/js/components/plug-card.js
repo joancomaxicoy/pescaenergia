@@ -524,10 +524,10 @@ class PlugCard extends HTMLElement {
                                 <div style="padding: 12px; display: flex; align-items: center; gap: 8px; font-size: 13px;">
                                     <span>Enjegar l'endoll quan hi hagi un excedent del</span>
                                     <select id="power-threshold" style="padding: 4px 8px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 13px;">
-                                        <option value="1">1%</option>
-                                        <option value="10">10%</option>
-                                        <option value="20">20%</option>
-                                        <option value="50">50%</option>
+                                        <option value="1">1Kw</option>
+                                        <option value="2">2Kw</option>
+                                        <option value="3">4Kw</option>
+                                        <option value="5">5Kw</option>
                                     </select>
                                 </div>
                             </div>
