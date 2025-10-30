@@ -34,7 +34,10 @@ const validateRegister = [
   body('email')
     .isEmail()
     .withMessage('Ha de ser un email vàlid')
-    .normalizeEmail()
+    .normalizeEmail({ 
+      gmail_remove_dots: false,
+      gmail_remove_subaddress: false
+    })
     .isLength({ max: 255 })
     .withMessage('L\'email no pot excedir 255 caràcters'),
   
@@ -59,7 +62,10 @@ const validateLogin = [
   body('email')
     .isEmail()
     .withMessage('Ha de ser un email vàlid')
-    .normalizeEmail(),
+    .normalizeEmail({ 
+      gmail_remove_dots: false,
+      gmail_remove_subaddress: false
+    }),
   
   body('password')
     .notEmpty()
@@ -95,7 +101,10 @@ const validateResendVerification = [
   body('email')
     .isEmail()
     .withMessage('Ha de ser un email vàlid')
-    .normalizeEmail(),
+    .normalizeEmail({ 
+      gmail_remove_dots: false,
+      gmail_remove_subaddress: false
+    }),
 
   handleValidationErrors
 ];
@@ -105,7 +114,10 @@ const validateForgotPassword = [
   body('email')
     .isEmail()
     .withMessage('Ha de ser un email vàlid')
-    .normalizeEmail(),
+    .normalizeEmail({ 
+      gmail_remove_dots: false,
+      gmail_remove_subaddress: false
+    }),
 
   handleValidationErrors
 ];
