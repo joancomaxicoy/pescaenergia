@@ -176,6 +176,7 @@ class DeviceHistoryService {
           timestamp
         FROM energy_metrics 
         WHERE device_id = $1
+          AND timestamp > NOW() - INTERVAL '2 hours'
       `;
       
       const params = [realDeviceId];
@@ -189,6 +190,7 @@ class DeviceHistoryService {
 
       query += `
         ORDER BY metric_name, timestamp DESC
+        LIMIT 100
       `;
 
       const result = await database.query(query, params);

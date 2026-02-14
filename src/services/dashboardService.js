@@ -820,80 +820,135 @@ class DashboardService {
       // Obtener datos históricos de las últimas 24h para extraer el último valor
       const historicalData = await this.getHistoricalChartData(userId, '24h');
 
-      // Extraer el último valor de consumo
       const consumptionDatasets = historicalData.datasets.filter(d => d.type === 'consumption');
-      let lastConsumptionPower = 0;
-      let consumptionTimestamp = null;
+      const generationDatasets = historicalData.datasets.filter(d => d.type === 'generation');
 
-      if (consumptionDatasets.length > 0) {
-        // Buscar el último valor no nulo en los datasets de consumo
-        for (let i = consumptionDatasets[0].data.length - 1; i >= 0; i--) {
-          const value = consumptionDatasets[0].data[i];
-          if (value !== null && value !== undefined) {
-            lastConsumptionPower = value;
-            consumptionTimestamp = historicalData.labels[i];
-            break;
+      // Crear un mapa de timestamps con datos de consumo y generación
+      const timestampData = new Map();
+      
+      // Iterar sobre todos los timestamps de atrás hacia adelante
+      for (let i = historicalData.labels.length - 1; i >= 0; i--) {
+        const timestamp = historicalData.labels[i];
+        let hasConsumption = false;
+        let hasGeneration = false;
+        let consumptionValue = 0;
+        let generationValue = 0;
+
+        // Verificar si hay datos de consumo en este timestamp
+        consumptionDatasets.forEach(dataset => {
+          const value = dataset.data[i];
+          if (value !== null && value !== undefined && value > 0) {
+            hasConsumption = true;
+            consumptionValue += value;
           }
+        });
+
+        // Verificar si hay datos de generación en este timestamp
+        generationDatasets.forEach(dataset => {
+          const value = dataset.data[i];
+          if (value !== null && value !== undefined && value > 0) {
+            hasGeneration = true;
+            generationValue += value;
+          }
+        });
+
+        // Solo guardar timestamps donde tengamos al menos uno de los dos
+        if (hasConsumption || hasGeneration) {
+          timestampData.set(timestamp, {
+            consumption: consumptionValue,
+            generation: generationValue,
+            hasConsumption,
+            hasGeneration,
+            index: i
+          });
         }
       }
 
-      // Extraer el último valor de generación para cada generador
-      const generationDatasets = historicalData.datasets.filter(d => d.type === 'generation');
+      // Buscar el timestamp más reciente donde tengamos AMBOS valores
+      let syncedTimestamp = null;
+      let syncedConsumption = 0;
+      let syncedGeneration = 0;
+      let syncedIndex = -1;
+
+      for (const [timestamp, data] of timestampData) {
+        if (data.hasConsumption && data.hasGeneration) {
+          syncedTimestamp = timestamp;
+          syncedConsumption = data.consumption;
+          syncedGeneration = data.generation;
+          syncedIndex = data.index;
+          break;
+        }
+      }
+
+      // Si no encontramos un timestamp con ambos, usar el más reciente disponible
+      if (!syncedTimestamp && timestampData.size > 0) {
+        const firstEntry = timestampData.entries().next().value;
+        syncedTimestamp = firstEntry[0];
+        syncedConsumption = firstEntry[1].consumption;
+        syncedGeneration = firstEntry[1].generation;
+        syncedIndex = firstEntry[1].index;
+        
+        logger.warn('No se encontró timestamp sincronizado, usando el más reciente', {
+          userId,
+          hasConsumption: firstEntry[1].hasConsumption,
+          hasGeneration: firstEntry[1].hasGeneration
+        });
+      }
+
+      // Construir información detallada de los generadores usando el índice sincronizado
       const generators = [];
       let totalGenerationPower = 0;
 
-      for (const dataset of generationDatasets) {
-        // Buscar el último valor no nulo
-        let lastPower = 0;
-        for (let i = dataset.data.length - 1; i >= 0; i--) {
-          const value = dataset.data[i];
-          if (value !== null && value !== undefined) {
-            lastPower = value;
-            break;
-          }
+      if (syncedIndex >= 0) {
+        for (const dataset of generationDatasets) {
+          const value = dataset.data[syncedIndex];
+          const lastPower = (value !== null && value !== undefined) ? value : 0;
+
+          // Extraer información del label (formato: "Nombre (XX%)")
+          const label = dataset.label || '';
+          const participationMatch = label.match(/\((\d+(?:\.\d+)?)\%\)/);
+          const participation = participationMatch ? parseFloat(participationMatch[1]) : 0;
+          const name = label.replace(/\s*\(\d+(?:\.\d+)?\%\)/, '').trim();
+
+          generators.push({
+            name,
+            participation,
+            myPower: lastPower,
+            totalPower: participation > 0 ? (lastPower * 100) / participation : 0
+          });
+
+          totalGenerationPower += lastPower;
         }
-
-        // Extraer información del label (formato: "Nombre (XX%)")
-        const label = dataset.label || '';
-        const participationMatch = label.match(/\((\d+(?:\.\d+)?)\%\)/);
-        const participation = participationMatch ? parseFloat(participationMatch[1]) : 0;
-        const name = label.replace(/\s*\(\d+(?:\.\d+)?\%\)/, '').trim();
-
-        generators.push({
-          name,
-          participation,
-          myPower: lastPower, // Este ya es el poder relativo a mi participación
-          totalPower: participation > 0 ? (lastPower * 100) / participation : 0 // Calcular poder total del generador
-        });
-
-        totalGenerationPower += lastPower;
       }
 
-      // Calcular balance
+      // Usar los valores sincronizados para calcular el balance
+      const lastConsumptionPower = syncedConsumption;
       const difference = lastConsumptionPower - totalGenerationPower;
       const selfConsumptionPercentage = lastConsumptionPower > 0 
         ? Math.min(100, (totalGenerationPower / lastConsumptionPower) * 100) 
         : 0;
 
-      logger.info('Potencia en tiempo real calculada', {
+      logger.info('Potencia en tiempo real calculada con timestamps sincronizados', {
         userId,
+        syncedTimestamp,
         consumption: lastConsumptionPower,
         generation: totalGenerationPower,
         difference,
-        selfConsumptionPercentage: selfConsumptionPercentage.toFixed(1)
+        selfConsumptionPercentage: selfConsumptionPercentage.toFixed(1),
+        isSynced: syncedIndex >= 0
       });
 
       return {
         consumption: {
           power: lastConsumptionPower,
-          timestamp: consumptionTimestamp
+          timestamp: syncedTimestamp
         },
         generation: {
           totalPower: totalGenerationPower,
           generators
         },
         balance: {
-          difference, // Positivo = necesito de la red, Negativo = excedente
+          difference,
           selfConsumptionPercentage,
           status: difference > 0 ? 'from_grid' : (difference < 0 ? 'surplus' : 'balanced')
         }
