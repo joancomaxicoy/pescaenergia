@@ -428,7 +428,7 @@ function initializeDashboard() {
 
 // Realtime Power Functions
 let realtimePowerData = null;
-const MAX_POWER = 5000; // 5kW máximo para los meters
+let adaptiveMaxPower = 10000; // Adaptive maximum for meters, starts at 10kW
 
 async function loadRealtimePower() {
     try {
@@ -448,26 +448,33 @@ async function loadRealtimePower() {
 }
 
 function updateRealtimePowerUI(data) {
-    // Update generation meter
+    // Update adaptive max power based on current values
     const generationPower = data.generation?.totalPower || 0;
+    const consumptionPower = data.consumption?.power || 0;
+    const maxCurrentValue = Math.max(generationPower, consumptionPower);
+
+    // Adapt the max power to be at least 20% higher than current max, but not less than 1000W
+    const newAdaptiveMax = Math.max(1000, maxCurrentValue * 1.2);
+    adaptiveMaxPower = Math.max(adaptiveMaxPower, newAdaptiveMax);
+
+    // Update generation meter
     const generationKw = generationPower / 1000;
-    const generationPercent = Math.min(100, (generationPower / MAX_POWER) * 100);
-    
+    const generationPercent = Math.min(100, (generationPower / adaptiveMaxPower) * 100);
+
     const generationValueEl = document.querySelector('#generationValue .value');
     const generationFillEl = document.getElementById('generationFill');
-    
+
     if (generationValueEl) {
         generationValueEl.textContent = generationKw.toFixed(2);
     }
-    
+
     if (generationFillEl) {
         generationFillEl.style.width = `${generationPercent}%`;
     }
-    
+
     // Update consumption meter
-    const consumptionPower = data.consumption?.power || 0;
     const consumptionKw = consumptionPower / 1000;
-    const consumptionPercent = Math.min(100, (consumptionPower / MAX_POWER) * 100);
+    const consumptionPercent = Math.min(100, (consumptionPower / adaptiveMaxPower) * 100);
     
     const consumptionValueEl = document.querySelector('#consumptionValue .value');
     const consumptionFillEl = document.getElementById('consumptionFill');

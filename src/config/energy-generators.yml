@@ -7,3 +7,8 @@ residencia:
   active: true
   name: Residència
   mqtt_topic: Generacio-Residencia
+
+sala-polivalent:
+  active: true
+  name: Sala Polivalent
+  mqtt_topic: Generacio-SalaPolivalent

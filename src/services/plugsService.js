@@ -1058,10 +1058,30 @@ class PlugsService {
       throw new Error(`El tipo de automatización debe ser uno de: ${validTypes.join(', ')}`);
     }
 
-    // Validar power (si está presente)
+    // Validar umbrales de potencia (si están presentes)
+    if (config.powerOnThreshold !== undefined) {
+      if (typeof config.powerOnThreshold !== 'number' || config.powerOnThreshold <= 0 || config.powerOnThreshold > 100) {
+        throw new Error('El umbral de encendido debe ser un número mayor que 0 y hasta 100 kW');
+      }
+    }
+
+    if (config.powerOffThreshold !== undefined) {
+      if (typeof config.powerOffThreshold !== 'number' || config.powerOffThreshold < 0 || config.powerOffThreshold > 100) {
+        throw new Error('El umbral de apagado debe ser un número entre 0 y 100 kW');
+      }
+    }
+
+    // Validar relación entre umbrales (powerOffThreshold debe ser menor que powerOnThreshold)
+    if (config.powerOnThreshold !== undefined && config.powerOffThreshold !== undefined) {
+      if (config.powerOffThreshold >= config.powerOnThreshold) {
+        throw new Error('El umbral de apagado debe ser menor que el umbral de encendido');
+      }
+    }
+
+    // Validar power (retrocompatibilidad - si está presente)
     if (config.power !== undefined) {
-      if (typeof config.power !== 'number' || config.power < 1 || config.power > 100) {
-        throw new Error('El umbral de potencia debe ser un número entre 1 y 100');
+      if (typeof config.power !== 'number' || config.power <= 0 || config.power > 100) {
+        throw new Error('El umbral de potencia debe ser un número mayor que 0 y hasta 100 kW');
       }
     }
 

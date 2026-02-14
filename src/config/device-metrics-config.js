@@ -20,13 +20,14 @@ const DEVICE_METRICS_CONFIG = {
     // Métricas que se guardan como series temporales (con agregados)
     timeSeriesMetrics: [
       'emeter_0_power',           // Potencia instantánea canal 0
-      'emeter_0_reactive_power',  // Potencia reactiva canal 0
-      'emeter_0_voltage',         // Voltaje canal 0
-      'emeter_0_frequency',       // Frecuencia canal 0
-      'emeter_1_power',           // Potencia instantánea canal 1
-      'emeter_1_reactive_power',  // Potencia reactiva canal 1
-      'emeter_1_voltage',         // Voltaje canal 1
-      'emeter_1_frequency'        // Frecuencia canal 1
+      // 'emeter_0_reactive_power',  // Potencia reactiva canal 0
+      // 'emeter_0_voltage',         // Voltaje canal 0
+      // 'emeter_0_frequency',       // Frecuencia canal 0
+      'emeter_0_energy',          // Contador a corto plazo (usar power o total)
+      // 'emeter_1_power',           // Potencia instantánea canal 1
+      // 'emeter_1_reactive_power',  // Potencia reactiva canal 1
+      // 'emeter_1_voltage',         // Voltaje canal 1
+      // 'emeter_1_frequency'        // Frecuencia canal 1
     ],
     
     // Métricas que se guardan como estados (valor actual)
@@ -41,7 +42,6 @@ const DEVICE_METRICS_CONFIG = {
     
     // Métricas que se ignoran (no se procesan)
     ignoredMetrics: [
-      'emeter_0_energy',          // Contador a corto plazo (usar power o total)
       'emeter_0_returned_energy', // Contador a corto plazo (usar total_returned)
       'emeter_1_energy',          // Contador a corto plazo (usar power o total)
       'emeter_1_returned_energy'  // Contador a corto plazo (usar total_returned)
@@ -59,7 +59,7 @@ const DEVICE_METRICS_CONFIG = {
       'status_switch:0_apower',      // Potencia instantánea
       'status_switch:0_aenergy_total', // Energía total consumida
       'status_switch:0_temperature_tC', // Temperatura interna
-      'status_wifi_rssi',            // Intensidad señal WiFi
+      //'status_wifi_rssi',            // Intensidad señal WiFi
       'status_switch:0_voltage',     // Voltaje de línea
       'status_switch:0_current'      // Corriente
     ],
@@ -110,6 +110,7 @@ const DEVICE_METRICS_CONFIG = {
     
     // Métricas que se guardan como series temporales
     timeSeriesMetrics: [
+      'e_total_fotovoltaica',        // Energía total generada
       'potenciaFotovoltaica',        // Potencia generada instantánea
       'voltatge',                    // Voltaje del generador
       'intensitat',                  // Intensidad del generador
@@ -122,7 +123,6 @@ const DEVICE_METRICS_CONFIG = {
     
     // Métricas que se guardan como estados
     stateMetrics: [
-      'e_total_fotovoltaica',        // Energía total generada
       'e_total_dia_fotovoltaica',    // Energía del día
       'e_total_abocada_fotovoltaica', // Energía vertida a red
       'e_activa_total',              // Energía activa total

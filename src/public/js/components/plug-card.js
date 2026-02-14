@@ -527,6 +527,7 @@ class PlugCard extends HTMLElement {
                                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
                                         <span style="flex: 1;">Encendre quan l'excedent sigui superior a:</span>
                                         <select id="power-on-threshold" style="padding: 4px 8px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 13px; min-width: 80px;">
+                                            <option value="0.5">0.5 kW</option>    
                                             <option value="1">1 kW</option>
                                             <option value="2">2 kW</option>
                                             <option value="3">3 kW</option>
@@ -542,6 +543,7 @@ class PlugCard extends HTMLElement {
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <span style="flex: 1;">Apagar quan l'excedent baixi de:</span>
                                         <select id="power-off-threshold" style="padding: 4px 8px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 13px; min-width: 80px;">
+                                            <option value="0.25">0.25 kW</option>
                                             <option value="0.5">0.5 kW</option>
                                             <option value="1">1 kW</option>
                                             <option value="1.5">1.5 kW</option>
