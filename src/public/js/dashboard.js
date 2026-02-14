@@ -7,6 +7,8 @@ let gaugeCharts = {};
 let historicalChart = null;
 let differenceChart = null;
 let currentPeriod = '24h';
+let customStartDate = null;
+let customEndDate = null;
 let energyUtilizationData = {
     totalKwUtilized: 0,
     totalKwWasted: 0,
@@ -391,6 +393,11 @@ function setupAutoRefresh() {
         }
     }, 60000); // 1 minute
 
+    // Realtime power update every 60 seconds
+    setInterval(() => {
+        loadRealtimePower();
+    }, 60000); // 1 minute
+
     // Historical chart refresh every 5 minutes
     setInterval(() => {
         if (dashboardData && dashboardData.hasParticipations && historicalChart) {
@@ -408,9 +415,113 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeDashboard() {
     console.log('Dashboard initialized');
     loadDashboardData();
+    loadRealtimePower(); // Load realtime power data
     setupAutoRefresh();
     
     // Initialize Lucide icons after DOM is ready
+    setTimeout(() => {
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }, 100);
+}
+
+// Realtime Power Functions
+let realtimePowerData = null;
+const MAX_POWER = 5000; // 5kW máximo para los meters
+
+async function loadRealtimePower() {
+    try {
+        console.log('Loading realtime power data...');
+        
+        const { data } = await window.apiClient.get('/api/dashboard/realtime-power');
+        
+        realtimePowerData = data;
+        updateRealtimePowerUI(data);
+        
+        console.log('Realtime power data loaded:', data);
+        
+    } catch (error) {
+        console.error('Error loading realtime power:', error);
+        // Show error state in the card if needed
+    }
+}
+
+function updateRealtimePowerUI(data) {
+    // Update generation meter
+    const generationPower = data.generation?.totalPower || 0;
+    const generationKw = generationPower / 1000;
+    const generationPercent = Math.min(100, (generationPower / MAX_POWER) * 100);
+    
+    const generationValueEl = document.querySelector('#generationValue .value');
+    const generationFillEl = document.getElementById('generationFill');
+    
+    if (generationValueEl) {
+        generationValueEl.textContent = generationKw.toFixed(2);
+    }
+    
+    if (generationFillEl) {
+        generationFillEl.style.width = `${generationPercent}%`;
+    }
+    
+    // Update consumption meter
+    const consumptionPower = data.consumption?.power || 0;
+    const consumptionKw = consumptionPower / 1000;
+    const consumptionPercent = Math.min(100, (consumptionPower / MAX_POWER) * 100);
+    
+    const consumptionValueEl = document.querySelector('#consumptionValue .value');
+    const consumptionFillEl = document.getElementById('consumptionFill');
+    
+    if (consumptionValueEl) {
+        consumptionValueEl.textContent = consumptionKw.toFixed(2);
+    }
+    
+    if (consumptionFillEl) {
+        consumptionFillEl.style.width = `${consumptionPercent}%`;
+    }
+    
+    // Update balance
+    const balance = data.balance || {};
+    const difference = balance.difference || 0;
+    const differenceKw = Math.abs(difference) / 1000;
+    const selfConsumption = balance.selfConsumptionPercentage || 0;
+    
+    const balanceValueEl = document.querySelector('#balanceValue .value');
+    const balanceContainerEl = document.getElementById('balanceValue');
+    const selfConsumptionEl = document.getElementById('selfConsumptionPercentage');
+    
+    if (balanceValueEl && balanceContainerEl) {
+        // Remove previous status classes
+        balanceContainerEl.classList.remove('from-grid', 'surplus', 'balanced');
+        
+        if (difference > 0) {
+            // Necesitamos energía de la red
+            balanceValueEl.textContent = `+${differenceKw.toFixed(2)} kW de la xarxa`;
+            balanceContainerEl.classList.add('from-grid');
+        } else if (difference < 0) {
+            // Tenemos excedente
+            balanceValueEl.textContent = `${differenceKw.toFixed(2)} kW excedent`;
+            balanceContainerEl.classList.add('surplus');
+        } else {
+            // Equilibrado
+            balanceValueEl.textContent = `0.00 kW equilibrat`;
+            balanceContainerEl.classList.add('balanced');
+        }
+    }
+    
+    if (selfConsumptionEl) {
+        selfConsumptionEl.textContent = `${selfConsumption.toFixed(1)}%`;
+    }
+    
+    // Update last update time
+    const lastUpdateEl = document.querySelector('#powerLastUpdate span');
+    if (lastUpdateEl && data.consumption?.timestamp) {
+        lastUpdateEl.textContent = formatRelativeTime(new Date(data.consumption.timestamp));
+    } else if (lastUpdateEl) {
+        lastUpdateEl.textContent = 'Ara mateix';
+    }
+    
+    // Initialize Lucide icons for the new elements
     setTimeout(() => {
         if (typeof lucide !== 'undefined') {
             lucide.createIcons();
@@ -446,11 +557,20 @@ function initializeLucideIcons() {
 }
 
 // Historical Chart Functions
-async function loadHistoricalChart(period = currentPeriod) {
+async function loadHistoricalChart(period = currentPeriod, startDate = null, endDate = null) {
     try {
         showChartLoading();
         
-        const { data } = await window.apiClient.get(`/api/dashboard/historical-chart?period=${period}`);
+        let url = `/api/dashboard/historical-chart?period=${period}`;
+        
+        // Add custom date range if provided
+        if (period === 'custom' && startDate && endDate) {
+            url += `&startDate=${startDate}&endDate=${endDate}`;
+            customStartDate = startDate;
+            customEndDate = endDate;
+        }
+        
+        const { data } = await window.apiClient.get(url);
         
         renderHistoricalChart(data);
         renderDifferenceChart(data);
@@ -668,17 +788,26 @@ function renderHistoricalChart(data) {
 function setupPeriodControls() {
     const periodToggle = document.getElementById('period-toggle');
     const differencePeriodToggle = document.getElementById('difference-period-toggle');
+    const dateRangePicker = document.getElementById('dateRangePicker');
     
     // Function to sync both toggles and load data
     function syncPeriodsAndLoadData(period, sourceToggleId) {
+        // If custom period, open date picker
+        if (period === 'custom') {
+            if (dateRangePicker) {
+                dateRangePicker.open();
+            }
+            return;
+        }
+        
         // Update the other toggle to match
         if (sourceToggleId === 'period-toggle' && differencePeriodToggle) {
-            const modeIndex = ['24h', '7d', '30d'].indexOf(period);
+            const modeIndex = ['24h', '7d', '30d', 'custom'].indexOf(period);
             if (modeIndex !== -1) {
                 differencePeriodToggle.setAttribute('mode', modeIndex.toString());
             }
         } else if (sourceToggleId === 'difference-period-toggle' && periodToggle) {
-            const modeIndex = ['24h', '7d', '30d'].indexOf(period);
+            const modeIndex = ['24h', '7d', '30d', 'custom'].indexOf(period);
             if (modeIndex !== -1) {
                 periodToggle.setAttribute('mode', modeIndex.toString());
             }
@@ -696,6 +825,17 @@ function setupPeriodControls() {
             const period = event.detail.value;
             syncPeriodsAndLoadData(period, 'period-toggle');
         });
+        
+        // Add click listener to reopen modal if custom is already selected
+        const customButton = periodToggle.shadowRoot?.querySelector('button[data-value="custom"]');
+        if (customButton) {
+            customButton.addEventListener('click', function(event) {
+                if (periodToggle.currentValue === 'custom' && dateRangePicker) {
+                    // If already in custom mode, reopen the modal
+                    dateRangePicker.open();
+                }
+            });
+        }
     }
     
     // Setup event listener for difference chart toggle
@@ -703,6 +843,38 @@ function setupPeriodControls() {
         differencePeriodToggle.addEventListener('mode-change', function(event) {
             const period = event.detail.value;
             syncPeriodsAndLoadData(period, 'difference-period-toggle');
+        });
+        
+        // Add click listener to reopen modal if custom is already selected
+        const customButton = differencePeriodToggle.shadowRoot?.querySelector('button[data-value="custom"]');
+        if (customButton) {
+            customButton.addEventListener('click', function(event) {
+                if (differencePeriodToggle.currentValue === 'custom' && dateRangePicker) {
+                    // If already in custom mode, reopen the modal
+                    dateRangePicker.open();
+                }
+            });
+        }
+    }
+    
+    // Setup event listener for date range picker
+    if (dateRangePicker) {
+        dateRangePicker.addEventListener('date-range-selected', function(event) {
+            const { startDate, endDate } = event.detail;
+            
+            console.log('Custom date range selected:', { startDate, endDate });
+            
+            // Sync both toggles to custom mode
+            const customIndex = 3; // Index of 'custom' in modes array
+            if (periodToggle) {
+                periodToggle.setAttribute('mode', customIndex.toString());
+            }
+            if (differencePeriodToggle) {
+                differencePeriodToggle.setAttribute('mode', customIndex.toString());
+            }
+            
+            // Load data with custom date range
+            loadHistoricalChart('custom', startDate, endDate);
         });
     }
 }

@@ -375,10 +375,12 @@ class DashboardService {
   /**
    * Obtiene datos históricos combinados para el gráfico del dashboard
    * @param {string} userId - ID del usuario
-   * @param {string} period - Período ('24h', '7d', '30d')
+   * @param {string} period - Período ('24h', '7d', '30d', 'custom')
+   * @param {string} startDate - Fecha inicial para período custom (ISO8601)
+   * @param {string} endDate - Fecha final para período custom (ISO8601)
    * @returns {Object} - Datos formateados para Chart.js
    */
-  async getHistoricalChartData(userId, period = '24h') {
+  async getHistoricalChartData(userId, period = '24h', startDate = null, endDate = null) {
     try {
       // Obtener información del usuario
       const userInfo = await this.getUserInfo(userId);
@@ -393,7 +395,10 @@ class DashboardService {
       const participations = await this.userParticipationService.getUserParticipations(userId);
       
       // Calcular fechas y agregación según el período
-      const { startDate, endDate, aggregation } = this.calculatePeriodParams(period);
+      const periodParams = this.calculatePeriodParams(period, startDate, endDate);
+      const calculatedStartDate = periodParams.startDate;
+      const calculatedEndDate = periodParams.endDate;
+      const aggregation = periodParams.aggregation;
 
       // Preparar promesas para obtener datos históricos
       const dataPromises = [];
@@ -415,8 +420,8 @@ class DashboardService {
             this.deviceHistoryService.getMetricEvolution(
               device.id, // Usar device_id en lugar de CUPS
               powerMetric, 
-              startDate, 
-              endDate, 
+              calculatedStartDate, 
+              calculatedEndDate, 
               aggregation
             ).then(result => ({
               ...result,
@@ -454,8 +459,8 @@ class DashboardService {
               this.deviceHistoryService.getMetricEvolution(
                 participation.generator_code,
                 powerMetric,
-                startDate,
-                endDate,
+                calculatedStartDate,
+                calculatedEndDate,
                 aggregation
               ).then(result => ({
                 ...result,
@@ -515,11 +520,12 @@ class DashboardService {
       // Si no hay timestamps, crear un conjunto básico para mostrar al menos la estructura
       if (sortedTimestamps.length === 0) {
         const now = new Date();
-        const { startDate: fallbackStart } = this.calculatePeriodParams(period);
+        const fallbackParams = this.calculatePeriodParams(period, startDate, endDate);
+        const fallbackStart = fallbackParams.startDate;
         
         // Crear timestamps de ejemplo para mostrar estructura vacía
         const timeDiff = now - fallbackStart;
-        const intervals = period === '24h' ? 24 : (period === '7d' ? 28 : 30); // 24h=24 points, 7d=28 points (every 6h), 30d=30 points (daily)
+        const intervals = period === '24h' ? 24 : (period === '7d' ? 28 : (period === 'custom' ? 30 : 30));
         
         for (let i = 0; i < intervals; i++) {
           const timestamp = new Date(fallbackStart.getTime() + (timeDiff / intervals) * i);
@@ -627,6 +633,10 @@ class DashboardService {
         } else if (period === '7d') {
           return date.toLocaleDateString('ca-ES', { ...options, weekday: 'short' }) + ' ' + 
                  date.toLocaleTimeString('ca-ES', { ...options, hour: '2-digit' });
+        } else if (period === 'custom') {
+          // Para rangos personalizados, mostrar fecha completa con hora
+          return date.toLocaleDateString('ca-ES', { ...options, day: 'numeric', month: 'short' }) + ' ' +
+                 date.toLocaleTimeString('ca-ES', { ...options, hour: '2-digit' });
         } else {
           return date.toLocaleDateString('ca-ES', { ...options, day: 'numeric', month: 'short' });
         }
@@ -649,8 +659,8 @@ class DashboardService {
         datasets,
         totalDataPoints: sortedTimestamps.length,
         dateRange: {
-          start: startDate.toISOString(),
-          end: endDate.toISOString()
+          start: calculatedStartDate.toISOString(),
+          end: calculatedEndDate.toISOString()
         }
       };
 
@@ -749,12 +759,14 @@ class DashboardService {
 
   /**
    * Calcula parámetros de fecha y agregación según el período
-   * @param {string} period - Período solicitado
+   * @param {string} period - Período solicitado ('24h', '7d', '30d', 'custom')
+   * @param {string} customStartDate - Fecha inicial para período custom (ISO8601)
+   * @param {string} customEndDate - Fecha final para período custom (ISO8601)
    * @returns {Object} - Parámetros calculados
    */
-  calculatePeriodParams(period) {
-    const endDate = new Date();
-    const startDate = new Date();
+  calculatePeriodParams(period, customStartDate = null, customEndDate = null) {
+    let endDate = new Date();
+    let startDate = new Date();
     let aggregation;
 
     switch (period) {
@@ -770,11 +782,131 @@ class DashboardService {
         startDate.setDate(startDate.getDate() - 30);
         aggregation = '30m';
         break;
+      case 'custom':
+        if (!customStartDate || !customEndDate) {
+          throw new Error('Per al període custom es requereixen startDate i endDate');
+        }
+        startDate = new Date(customStartDate);
+        endDate = new Date(customEndDate);
+        
+        // Calcular agregación basada en el rango de fechas
+        const diffTime = Math.abs(endDate - startDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays <= 1) {
+          aggregation = '30m'; // Hasta 1 día: agregación cada 30 minutos
+        } else if (diffDays <= 7) {
+          aggregation = '30m'; // Hasta 7 días: agregación cada 30 minutos
+        } else if (diffDays <= 30) {
+          aggregation = '30m'; // Hasta 30 días: agregación cada 30 minutos
+        } else {
+          aggregation = '1h'; // Más de 30 días: agregación cada hora
+        }
+        break;
       default:
         throw new Error('Període no vàlid');
     }
 
     return { startDate, endDate, aggregation };
+  }
+
+  /**
+   * Obtiene la potencia en tiempo real del usuario (consumo y generación)
+   * @param {string} userId - ID del usuario
+   * @returns {Object} - Datos de potencia en tiempo real
+   */
+  async getRealtimePower(userId) {
+    try {
+      // Obtener datos históricos de las últimas 24h para extraer el último valor
+      const historicalData = await this.getHistoricalChartData(userId, '24h');
+
+      // Extraer el último valor de consumo
+      const consumptionDatasets = historicalData.datasets.filter(d => d.type === 'consumption');
+      let lastConsumptionPower = 0;
+      let consumptionTimestamp = null;
+
+      if (consumptionDatasets.length > 0) {
+        // Buscar el último valor no nulo en los datasets de consumo
+        for (let i = consumptionDatasets[0].data.length - 1; i >= 0; i--) {
+          const value = consumptionDatasets[0].data[i];
+          if (value !== null && value !== undefined) {
+            lastConsumptionPower = value;
+            consumptionTimestamp = historicalData.labels[i];
+            break;
+          }
+        }
+      }
+
+      // Extraer el último valor de generación para cada generador
+      const generationDatasets = historicalData.datasets.filter(d => d.type === 'generation');
+      const generators = [];
+      let totalGenerationPower = 0;
+
+      for (const dataset of generationDatasets) {
+        // Buscar el último valor no nulo
+        let lastPower = 0;
+        for (let i = dataset.data.length - 1; i >= 0; i--) {
+          const value = dataset.data[i];
+          if (value !== null && value !== undefined) {
+            lastPower = value;
+            break;
+          }
+        }
+
+        // Extraer información del label (formato: "Nombre (XX%)")
+        const label = dataset.label || '';
+        const participationMatch = label.match(/\((\d+(?:\.\d+)?)\%\)/);
+        const participation = participationMatch ? parseFloat(participationMatch[1]) : 0;
+        const name = label.replace(/\s*\(\d+(?:\.\d+)?\%\)/, '').trim();
+
+        generators.push({
+          name,
+          participation,
+          myPower: lastPower, // Este ya es el poder relativo a mi participación
+          totalPower: participation > 0 ? (lastPower * 100) / participation : 0 // Calcular poder total del generador
+        });
+
+        totalGenerationPower += lastPower;
+      }
+
+      // Calcular balance
+      const difference = lastConsumptionPower - totalGenerationPower;
+      const selfConsumptionPercentage = lastConsumptionPower > 0 
+        ? Math.min(100, (totalGenerationPower / lastConsumptionPower) * 100) 
+        : 0;
+
+      logger.info('Potencia en tiempo real calculada', {
+        userId,
+        consumption: lastConsumptionPower,
+        generation: totalGenerationPower,
+        difference,
+        selfConsumptionPercentage: selfConsumptionPercentage.toFixed(1)
+      });
+
+      return {
+        consumption: {
+          power: lastConsumptionPower,
+          timestamp: consumptionTimestamp
+        },
+        generation: {
+          totalPower: totalGenerationPower,
+          generators
+        },
+        balance: {
+          difference, // Positivo = necesito de la red, Negativo = excedente
+          selfConsumptionPercentage,
+          status: difference > 0 ? 'from_grid' : (difference < 0 ? 'surplus' : 'balanced')
+        }
+      };
+
+    } catch (error) {
+      logger.error('Error obteniendo potencia en tiempo real:', {
+        userId,
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
   }
 
   /**

@@ -70,33 +70,79 @@ class PowerEvaluator {
   }
 
   /**
-   * Evalúa si un dispositivo debe estar encendido según el exceso de potencia
+   * Evalúa si un dispositivo debe estar encendido según el exceso de potencia con histéresis
+   * Usa dos umbrales para evitar oscilaciones (flapping):
+   * - powerOnThreshold: umbral para ENCENDER (debe ser mayor)
+   * - powerOffThreshold: umbral para APAGAR (debe ser menor)
+   * 
    * @param {Object} config - Configuración de automatización del dispositivo
-   * @param {Object} powerData - Datos de potencia actuales (opcional, se calcula si no se proporciona)
+   * @param {Object} currentPowerData - Datos de potencia actuales
+   * @param {boolean} currentDeviceState - Estado actual del dispositivo (true=ON, false=OFF)
    * @returns {boolean|null} - true si debe estar ON, false si debe estar OFF, null si no hay cambio
    */
-  evaluate(config, currentPowerData) {
+  evaluate(config, currentPowerData, currentDeviceState = false) {
     try {
+      // Obtener umbrales de potencia configurados (en kW)
+      const powerOnThreshold = parseFloat(config.config.powerOnThreshold || config.config.power) || 0;
+      const powerOffThreshold = parseFloat(config.config.powerOffThreshold) || (powerOnThreshold * 0.4); // Default: 40% del umbral ON
       
-      // Obtener umbral de potencia configurado
-      const powerThreshold = parseFloat(config.config.power) || 0;
-      const difference = (currentPowerData[config.userId]?.difference * 1000 ) || 0;
+      // Diferencia de potencia actual (generación - consumo) en Watts
+      const differenceKW = currentPowerData[config.userId]?.difference || 0;
+      const differenceW = differenceKW * 1000;
 
-      if (powerThreshold <= 0) {
-        logger.warn('Umbral de potencia inválido', { powerThreshold });
+      // Convertir umbrales a Watts para comparación
+      const onThresholdW = powerOnThreshold * 1000;
+      const offThresholdW = powerOffThreshold * 1000;
+
+      // Validación de umbrales
+      if (powerOnThreshold <= 0) {
+        logger.warn('Umbral de encendido inválido', { powerOnThreshold });
         return null;
       }
 
-      let powerDifference = difference > powerThreshold;
+      if (powerOffThreshold < 0) {
+        logger.warn('Umbral de apagado inválido', { powerOffThreshold });
+        return null;
+      }
 
-      return powerDifference;
+      if (powerOffThreshold >= powerOnThreshold) {
+        logger.warn('Umbral de apagado debe ser menor que umbral de encendido', { 
+          powerOnThreshold, 
+          powerOffThreshold 
+        });
+        return null;
+      }
 
-      // // diferencia entre geeración y consumo
-      // let powerDifference = difference > powerThreshold;
+      // Lógica de histéresis
+      let shouldBeOn;
+      
+      if (currentDeviceState) {
+        // Si el dispositivo está ENCENDIDO, solo apagar si cae por debajo del umbral de apagado
+        shouldBeOn = differenceW >= offThresholdW;
+        
+        logger.debug('Evaluación power (dispositivo ON)', {
+          deviceId: config.deviceId,
+          deviceName: config.deviceName,
+          currentState: 'ON',
+          differenceW,
+          offThresholdW,
+          decision: shouldBeOn ? 'MANTENER ON' : 'APAGAR'
+        });
+      } else {
+        // Si el dispositivo está APAGADO, solo encender si supera el umbral de encendido
+        shouldBeOn = differenceW >= onThresholdW;
+        
+        logger.debug('Evaluación power (dispositivo OFF)', {
+          deviceId: config.deviceId,
+          deviceName: config.deviceName,
+          currentState: 'OFF',
+          differenceW,
+          onThresholdW,
+          decision: shouldBeOn ? 'ENCENDER' : 'MANTENER OFF'
+        });
+      }
 
-      // console.log(powerDifference);
-
-      // return powerDifference;
+      return shouldBeOn;
 
     } catch (error) {
       logger.error('Error evaluando configuración power', {
@@ -132,15 +178,20 @@ class PowerEvaluator {
 
       for (const configData of configs) {
         try {
-          // true o false
-          const evaluation = this.evaluate(configData, currentPowerData);
+          // Obtener estado actual del dispositivo desde cache
+          const currentDeviceState = this.memoryCache.getDeviceState(configData.deviceId)?.isOn || false;
+          
+          // Evaluar con histéresis usando el estado actual
+          const evaluation = this.evaluate(configData, currentPowerData, currentDeviceState);
           
           results.push({
             deviceId: configData.deviceId,
             deviceName: configData.deviceName,
             config: configData.config,
             evaluation: evaluation,
-            powerThreshold: parseFloat(configData.config.power) || 0
+            currentState: currentDeviceState,
+            powerOnThreshold: parseFloat(configData.config.powerOnThreshold || configData.config.power) || 0,
+            powerOffThreshold: parseFloat(configData.config.powerOffThreshold) || 0
           });
 
         } catch (configError) {

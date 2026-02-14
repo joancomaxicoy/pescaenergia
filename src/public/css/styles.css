@@ -1318,3 +1318,314 @@ h1, h2, h3, h4, h5, h6, b {
         padding: 20px;
     }
 }
+
+/* Power Overview Card */
+.power-overview-card {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.power-overview-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #f8f9fa;
+}
+
+.power-overview-card .card-title {
+    color: #1b4444;
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.power-overview-card .card-title i {
+    width: 26px;
+    height: 26px;
+    color: #fcbd25;
+}
+
+.last-update-time {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #666;
+    font-size: 13px;
+}
+
+.last-update-time i {
+    width: 16px;
+    height: 16px;
+}
+
+.power-meters {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    margin-bottom: 25px;
+}
+
+.power-meter {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.meter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.meter-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #1b4444;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.meter-label i {
+    width: 20px;
+    height: 20px;
+    color: #fcbd25;
+}
+
+.meter-value {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 24px;
+    font-weight: 700;
+    color: #1b4444;
+}
+
+.meter-value .value {
+    font-size: 24px;
+}
+
+.meter-value .unit {
+    font-size: 14px;
+    color: #666;
+    font-weight: 500;
+}
+
+.meter-bar-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.meter-bar {
+    height: 32px;
+    background: #f1f3f5;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.meter-fill {
+    height: 100%;
+    transition: width 0.5s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.meter-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.3) 50%,
+        rgba(255,255,255,0) 100%
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.meter-fill.generation {
+    background: linear-gradient(90deg, #459f49 0%, #66bb6a 100%);
+}
+
+.meter-fill.consumption {
+    background: linear-gradient(90deg, #1b4444 0%, #2d7a7a 100%);
+}
+
+.meter-range {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #999;
+    padding: 0 4px;
+}
+
+.power-balance {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.balance-content {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.balance-label {
+    color: #666;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.balance-value {
+    font-size: 22px;
+    font-weight: 700;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.balance-value .value {
+    font-size: 22px;
+}
+
+.balance-value.from-grid {
+    color: #dc3545;
+}
+
+.balance-value.surplus {
+    color: #459f49;
+}
+
+.balance-value.balanced {
+    color: #1b4444;
+}
+
+.balance-percentage {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.percentage-label {
+    color: #666;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.percentage-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fcbd25;
+}
+
+/* Responsive for power overview card */
+@media (max-width: 768px) {
+    .power-overview-card {
+        padding: 20px;
+    }
+    
+    .power-overview-card .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .meter-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .meter-value {
+        font-size: 20px;
+    }
+    
+    .meter-value .value {
+        font-size: 20px;
+    }
+    
+    .power-balance {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 15px;
+    }
+    
+    .balance-value {
+        font-size: 20px;
+    }
+    
+    .balance-value .value {
+        font-size: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .power-overview-card .card-title {
+        font-size: 18px;
+    }
+    
+    .meter-label {
+        font-size: 14px;
+    }
+    
+    .meter-value {
+        font-size: 18px;
+    }
+    
+    .meter-value .value {
+        font-size: 18px;
+    }
+    
+    .meter-bar {
+        height: 24px;
+    }
+    
+    .balance-label {
+        font-size: 14px;
+    }
+    
+    .balance-value {
+        font-size: 18px;
+    }
+    
+    .balance-value .value {
+        font-size: 18px;
+    }
+    
+    .percentage-label {
+        font-size: 13px;
+    }
+    
+    .percentage-value {
+        font-size: 16px;
+    }
+}

@@ -24,7 +24,8 @@ class PlugCard extends HTMLElement {
         this.powerAutomationEnabled = false; // Estado del switch de automatización por potencia
         this.timeAutomationEnabled = false; // Estado del switch de automatización horaria
         this.automationMode = 'manual'; // 'manual', 'power', 'schedule'
-        this.powerThreshold = 10; // Porcentaje de potencia por defecto
+        this.powerOnThreshold = 5; // Umbral de encendido en kW (por defecto 5 kW)
+        this.powerOffThreshold = 2; // Umbral de apagado en kW (por defecto 2 kW)
         
         // Control de visibilidad
         this.visibilityObserver = null;
@@ -513,7 +514,7 @@ class PlugCard extends HTMLElement {
                             </button-toggle>
                         </div>
                         
-                        <!-- Automatización por potencia -->
+                        <!-- Automatización por potencia con histéresis -->
                         <div class="automation-table" id="power-automation-table" style="margin-bottom: 15px; display: none;">
                             <div class="automation-table-header">
                                 <div class="automation-header-title">
@@ -521,14 +522,41 @@ class PlugCard extends HTMLElement {
                                 </div>
                             </div>
                             <div class="automation-table-body">
-                                <div style="padding: 12px; display: flex; align-items: center; gap: 8px; font-size: 13px;">
-                                    <span>Enjegar l'endoll quan hi hagi un excedent del</span>
-                                    <select id="power-threshold" style="padding: 4px 8px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 13px;">
-                                        <option value="1">1Kw</option>
-                                        <option value="2">2Kw</option>
-                                        <option value="3">4Kw</option>
-                                        <option value="5">5Kw</option>
-                                    </select>
+                                <div style="padding: 12px; font-size: 13px;">
+                                    <!-- Umbral de encendido -->
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                                        <span style="flex: 1;">Encendre quan l'excedent sigui superior a:</span>
+                                        <select id="power-on-threshold" style="padding: 4px 8px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 13px; min-width: 80px;">
+                                            <option value="1">1 kW</option>
+                                            <option value="2">2 kW</option>
+                                            <option value="3">3 kW</option>
+                                            <option value="4">4 kW</option>
+                                            <option value="5" selected>5 kW</option>
+                                            <option value="6">6 kW</option>
+                                            <option value="7">7 kW</option>
+                                            <option value="8">8 kW</option>
+                                            <option value="10">10 kW</option>
+                                        </select>
+                                    </div>
+                                    <!-- Umbral de apagado -->
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="flex: 1;">Apagar quan l'excedent baixi de:</span>
+                                        <select id="power-off-threshold" style="padding: 4px 8px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 13px; min-width: 80px;">
+                                            <option value="0.5">0.5 kW</option>
+                                            <option value="1">1 kW</option>
+                                            <option value="1.5">1.5 kW</option>
+                                            <option value="2" selected>2 kW</option>
+                                            <option value="2.5">2.5 kW</option>
+                                            <option value="3">3 kW</option>
+                                            <option value="4">4 kW</option>
+                                            <option value="5">5 kW</option>
+                                        </select>
+                                    </div>
+                                    <!-- Mensaje de ayuda -->
+                                    <div style="margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 11px; color: #666;">
+                                        <i data-lucide="info" style="width: 12px; height: 12px; vertical-align: middle;"></i>
+                                        La diferència entre els dos valors evita que l'endoll s'encengui i s'apagui constantment.
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -581,11 +609,17 @@ class PlugCard extends HTMLElement {
             automationModeToggle.addEventListener('mode-change', this.handleAutomationModeChange.bind(this));
         }
         
-        // Event listener para el selector de potencia
-        const powerThresholdSelect = this.querySelector('#power-threshold');
-        if (powerThresholdSelect) {
-            powerThresholdSelect.addEventListener('change', this.handlePowerThresholdChange.bind(this));
-            powerThresholdSelect.value = this.powerThreshold; // Establecer valor inicial
+        // Event listeners para los selectores de potencia
+        const powerOnThresholdSelect = this.querySelector('#power-on-threshold');
+        if (powerOnThresholdSelect) {
+            powerOnThresholdSelect.addEventListener('change', this.handlePowerOnThresholdChange.bind(this));
+            powerOnThresholdSelect.value = this.powerOnThreshold; // Establecer valor inicial
+        }
+        
+        const powerOffThresholdSelect = this.querySelector('#power-off-threshold');
+        if (powerOffThresholdSelect) {
+            powerOffThresholdSelect.addEventListener('change', this.handlePowerOffThresholdChange.bind(this));
+            powerOffThresholdSelect.value = this.powerOffThreshold; // Establecer valor inicial
         }
         
         // Inicializar slots de automatización
@@ -1340,8 +1374,15 @@ class PlugCard extends HTMLElement {
         // Aplicar tipo de automatización
         this.automationMode = automation.type || 'manual';
         
-        // Aplicar umbral de potencia
-        this.powerThreshold = automation.power || 10;
+        // Aplicar umbrales de potencia con valores por defecto
+        this.powerOnThreshold = parseFloat(automation.powerOnThreshold || automation.power) || 5;
+        this.powerOffThreshold = parseFloat(automation.powerOffThreshold) || (this.powerOnThreshold * 0.4);
+        
+        // Asegurar que powerOffThreshold sea menor que powerOnThreshold
+        if (this.powerOffThreshold >= this.powerOnThreshold) {
+            this.powerOffThreshold = this.powerOnThreshold * 0.4;
+            console.warn('powerOffThreshold ajustado para ser menor que powerOnThreshold');
+        }
         
         // Limpiar slots existentes
         this.automationSlots = [];
@@ -1374,7 +1415,8 @@ class PlugCard extends HTMLElement {
         
         console.log('Configuración aplicada:', {
             mode: this.automationMode,
-            power: this.powerThreshold,
+            powerOnThreshold: this.powerOnThreshold,
+            powerOffThreshold: this.powerOffThreshold,
             slots: this.automationSlots.length
         });
     }
@@ -1384,7 +1426,8 @@ class PlugCard extends HTMLElement {
      */
     initializeDefaultAutomation() {
         this.automationMode = 'manual';
-        this.powerThreshold = 10;
+        this.powerOnThreshold = 5;
+        this.powerOffThreshold = 2;
         this.automationSlots = [];
         this.nextSlotId = 1;
         
@@ -1424,10 +1467,15 @@ class PlugCard extends HTMLElement {
             this.updateAutomationModeDisplay(modeIndex);
         }
         
-        // Actualizar el selector de potencia
-        const powerThresholdSelect = this.querySelector('#power-threshold');
-        if (powerThresholdSelect) {
-            powerThresholdSelect.value = this.powerThreshold;
+        // Actualizar los selectores de potencia
+        const powerOnThresholdSelect = this.querySelector('#power-on-threshold');
+        if (powerOnThresholdSelect) {
+            powerOnThresholdSelect.value = this.powerOnThreshold;
+        }
+        
+        const powerOffThresholdSelect = this.querySelector('#power-off-threshold');
+        if (powerOffThresholdSelect) {
+            powerOffThresholdSelect.value = this.powerOffThreshold;
         }
     }
 
@@ -1541,11 +1589,41 @@ class PlugCard extends HTMLElement {
     }
 
     /**
-     * Maneja el cambio del umbral de potencia
+     * Maneja el cambio del umbral de encendido
      */
-    handlePowerThresholdChange(event) {
-        this.powerThreshold = parseInt(event.target.value);
-        console.log(`Power threshold changed to: ${this.powerThreshold}%`);
+    handlePowerOnThresholdChange(event) {
+        const newValue = parseFloat(event.target.value);
+        
+        // Validar que el umbral ON sea mayor que el umbral OFF
+        if (newValue <= this.powerOffThreshold) {
+            alert(`El umbral d'encesa (${newValue} kW) ha de ser superior al d'apagat (${this.powerOffThreshold} kW)`);
+            event.target.value = this.powerOnThreshold; // Revertir
+            return;
+        }
+        
+        this.powerOnThreshold = newValue;
+        console.log(`Power ON threshold changed to: ${this.powerOnThreshold} kW`);
+        
+        // Generar y guardar configuración automáticamente
+        this.generateAutomationConfig();
+        this.saveAutomationConfig();
+    }
+
+    /**
+     * Maneja el cambio del umbral de apagado
+     */
+    handlePowerOffThresholdChange(event) {
+        const newValue = parseFloat(event.target.value);
+        
+        // Validar que el umbral OFF sea menor que el umbral ON
+        if (newValue >= this.powerOnThreshold) {
+            alert(`El umbral d'apagat (${newValue} kW) ha de ser inferior al d'encesa (${this.powerOnThreshold} kW)`);
+            event.target.value = this.powerOffThreshold; // Revertir
+            return;
+        }
+        
+        this.powerOffThreshold = newValue;
+        console.log(`Power OFF threshold changed to: ${this.powerOffThreshold} kW`);
         
         // Generar y guardar configuración automáticamente
         this.generateAutomationConfig();
@@ -1589,7 +1667,9 @@ class PlugCard extends HTMLElement {
     generateAutomationConfig() {
         const config = {
             type: this.automationMode,
-            power: this.powerThreshold,
+            powerOnThreshold: this.powerOnThreshold,
+            powerOffThreshold: this.powerOffThreshold,
+            power: this.powerOnThreshold, // Mantener retrocompatibilidad
             schedule: this.automationSlots
                 .filter(slot => slot.data && this.isValidSlotData(slot.data))
                 .map(slot => ({

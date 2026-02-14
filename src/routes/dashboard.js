@@ -346,16 +346,57 @@ router.get('/historical-chart',
   [
     query('period')
       .optional()
-      .isIn(['24h', '7d', '30d'])
-      .withMessage('period debe ser uno de: 24h, 7d, 30d')
+      .isIn(['24h', '7d', '30d', 'custom'])
+      .withMessage('period debe ser uno de: 24h, 7d, 30d, custom'),
+    query('startDate')
+      .optional()
+      .isISO8601()
+      .withMessage('startDate debe ser una fecha válida en formato ISO8601'),
+    query('endDate')
+      .optional()
+      .isISO8601()
+      .withMessage('endDate debe ser una fecha válida en formato ISO8601')
   ],
   handleValidationErrors,
   asyncHandler(async (req, res) => {
     try {
       const userId = req.user.userId;
-      const { period = '24h' } = req.query;
+      const { period = '24h', startDate, endDate } = req.query;
 
-      const historicalData = await dashboardService.getHistoricalChartData(userId, period);
+      // Validate custom period parameters
+      if (period === 'custom') {
+        if (!startDate || !endDate) {
+          return res.status(400).json({
+            error: 'Para el período custom se requieren startDate y endDate',
+            code: 'MISSING_DATE_PARAMETERS',
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        if (end <= start) {
+          return res.status(400).json({
+            error: 'La fecha final debe ser posterior a la fecha inicial',
+            code: 'INVALID_DATE_RANGE',
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays > 90) {
+          return res.status(400).json({
+            error: 'El rango de fechas no puede superar los 90 días',
+            code: 'DATE_RANGE_TOO_LARGE',
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+
+      const historicalData = await dashboardService.getHistoricalChartData(userId, period, startDate, endDate);
 
       logger.info('Datos históricos del gráfico solicitados', {
         userId,
@@ -373,6 +414,104 @@ router.get('/historical-chart',
       logger.error('Error obteniendo datos históricos del gráfico:', {
         userId: req.user?.userId,
         period: req.query?.period,
+        error: error.message,
+        stack: error.stack
+      });
+
+      res.status(500).json({
+        error: 'Error interno del servidor',
+        details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+        timestamp: new Date().toISOString()
+      });
+    }
+  })
+);
+
+/**
+ * @swagger
+ * /api/dashboard/realtime-power:
+ *   get:
+ *     summary: Obtiene la potencia en tiempo real del usuario
+ *     description: Retorna la potencia de consumo y generación actual del usuario
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Potencia en tiempo real obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 consumption:
+ *                   type: object
+ *                   properties:
+ *                     power:
+ *                       type: number
+ *                       description: Potencia de consumo en Watts
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *                 generation:
+ *                   type: object
+ *                   properties:
+ *                     totalPower:
+ *                       type: number
+ *                       description: Potencia total de generación (mi parte) en Watts
+ *                     generators:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           code:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           power:
+ *                             type: number
+ *                           participation:
+ *                             type: number
+ *                           myPower:
+ *                             type: number
+ *                 balance:
+ *                   type: object
+ *                   properties:
+ *                     difference:
+ *                       type: number
+ *                       description: Diferencia entre consumo y generación (positivo = de la red, negativo = excedente)
+ *                     percentage:
+ *                       type: number
+ *                       description: Porcentaje de autoconsumo
+ *       401:
+ *         description: No autorizado
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.get('/realtime-power',
+  authenticateToken,
+  requireEmailValidation,
+  asyncHandler(async (req, res) => {
+    try {
+      const userId = req.user.userId;
+
+      const realtimePower = await dashboardService.getRealtimePower(userId);
+
+      logger.info('Potencia en tiempo real solicitada', {
+        userId,
+        consumption: realtimePower.consumption?.power || 0,
+        generation: realtimePower.generation?.totalPower || 0
+      });
+
+      res.json({
+        message: 'Potencia en tiempo real obtenida exitosamente',
+        ...realtimePower,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      logger.error('Error obteniendo potencia en tiempo real:', {
+        userId: req.user?.userId,
         error: error.message,
         stack: error.stack
       });

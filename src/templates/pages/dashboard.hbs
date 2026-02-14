@@ -44,7 +44,7 @@
                     <div class="chart-controls">
                         <button-toggle 
                             id="period-toggle"
-                            modes="24h,7d,30d"
+                            modes="24h,7d,30d,custom"
                             mode="0">
                         </button-toggle>
                     </div>
@@ -69,6 +69,82 @@
                     <div class="legend-item generation">
                         <span class="legend-color"></span>
                         <span class="legend-label">Generació</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-time Power Card -->
+            <div class="power-overview-card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i data-lucide="zap"></i>
+                        Potència en Temps Real
+                    </h3>
+                    <div class="last-update-time" id="powerLastUpdate">
+                        <i data-lucide="clock"></i>
+                        <span>Carregant...</span>
+                    </div>
+                </div>
+                
+                <div class="power-meters">
+                    <!-- Generation Meter -->
+                    <div class="power-meter">
+                        <div class="meter-header">
+                            <span class="meter-label">
+                                <i data-lucide="sun"></i>
+                                Generació Solar (la meva part)
+                            </span>
+                            <span class="meter-value" id="generationValue">
+                                <span class="value">-</span>
+                                <span class="unit">kW</span>
+                            </span>
+                        </div>
+                        <div class="meter-bar-container">
+                            <div class="meter-bar">
+                                <div class="meter-fill generation" id="generationFill" style="width: 0%"></div>
+                            </div>
+                            <div class="meter-range">
+                                <span>0 kW</span>
+                                <span id="generationMax">5 kW</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Consumption Meter -->
+                    <div class="power-meter">
+                        <div class="meter-header">
+                            <span class="meter-label">
+                                <i data-lucide="home"></i>
+                                El meu Consum
+                            </span>
+                            <span class="meter-value" id="consumptionValue">
+                                <span class="value">-</span>
+                                <span class="unit">kW</span>
+                            </span>
+                        </div>
+                        <div class="meter-bar-container">
+                            <div class="meter-bar">
+                                <div class="meter-fill consumption" id="consumptionFill" style="width: 0%"></div>
+                            </div>
+                            <div class="meter-range">
+                                <span>0 kW</span>
+                                <span id="consumptionMax">5 kW</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Balance -->
+                <div class="power-balance" id="powerBalance">
+                    <div class="balance-content">
+                        <span class="balance-label">Balanç:</span>
+                        <span class="balance-value" id="balanceValue">
+                            <span class="value">-</span>
+                        </span>
+                    </div>
+                    <div class="balance-percentage">
+                        <span class="percentage-label">Autoconsum:</span>
+                        <span class="percentage-value" id="selfConsumptionPercentage">-%</span>
                     </div>
                 </div>
             </div>
@@ -110,7 +186,7 @@
                     <div class="chart-controls">
                         <button-toggle 
                             id="difference-period-toggle"
-                            modes="24h,7d,30d"
+                            modes="24h,7d,30d,custom"
                             mode="0">
                         </button-toggle>
                     </div>
@@ -148,9 +224,14 @@
     </div>
 </div>
 
+<!-- Date Range Picker Component -->
+<date-range-picker id="dateRangePicker" max-range-days="90"></date-range-picker>
+
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <!-- Lucide Icons -->
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 <!-- Button Toggle Component -->
 <script src="/js/components/button-toggle.js"></script>
+<!-- Date Range Picker Component -->
+<script src="/js/components/date-range-picker.js"></script>
