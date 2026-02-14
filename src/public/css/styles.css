@@ -1550,6 +1550,104 @@ h1, h2, h3, h4, h5, h6, b {
     color: #fcbd25;
 }
 
+/* Generator Breakdown Section */
+.generator-breakdown {
+    margin-top: 25px;
+    padding-top: 25px;
+    border-top: 2px solid #f0f0f0;
+}
+
+.breakdown-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #1b4444;
+    font-weight: 600;
+    font-size: 16px;
+    margin-bottom: 15px;
+}
+
+.breakdown-header i {
+    width: 20px;
+    height: 20px;
+    color: #fcbd25;
+}
+
+.breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.breakdown-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    border-left: 4px solid #459f49;
+    transition: background 0.3s ease;
+}
+
+.breakdown-item:hover {
+    background: #f0f2f4;
+}
+
+.breakdown-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.breakdown-name {
+    color: #1b4444;
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.breakdown-participation {
+    background: #459f49;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.breakdown-item-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    font-size: 13px;
+    color: #666;
+}
+
+.breakdown-power {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.breakdown-power strong {
+    color: #1b4444;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.breakdown-total {
+    color: #999;
+    font-size: 12px;
+}
+
+.breakdown-empty {
+    text-align: center;
+    color: #999;
+    font-style: italic;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
 /* Responsive for power overview card */
 @media (max-width: 768px) {
     .power-overview-card {
@@ -1588,6 +1686,12 @@ h1, h2, h3, h4, h5, h6, b {
     
     .balance-value .value {
         font-size: 20px;
+    }
+    
+    .breakdown-item-details {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
     }
 }
 
@@ -1630,5 +1734,26 @@ h1, h2, h3, h4, h5, h6, b {
     
     .percentage-value {
         font-size: 16px;
+    }
+    
+    .breakdown-header {
+        font-size: 14px;
+    }
+    
+    .breakdown-item {
+        padding: 12px;
+    }
+    
+    .breakdown-name {
+        font-size: 14px;
+    }
+    
+    .breakdown-participation {
+        font-size: 12px;
+        padding: 3px 10px;
+    }
+    
+    .breakdown-power strong {
+        font-size: 14px;
     }
 }

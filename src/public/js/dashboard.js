@@ -457,7 +457,7 @@ function updateRealtimePowerUI(data) {
     const newAdaptiveMax = Math.max(1000, maxCurrentValue * 1.2);
     adaptiveMaxPower = Math.max(adaptiveMaxPower, newAdaptiveMax);
 
-    // Update generation meter
+    // Update generation meter with detailed breakdown
     const generationKw = generationPower / 1000;
     const generationPercent = Math.min(100, (generationPower / adaptiveMaxPower) * 100);
 
@@ -465,7 +465,23 @@ function updateRealtimePowerUI(data) {
     const generationFillEl = document.getElementById('generationFill');
 
     if (generationValueEl) {
-        generationValueEl.textContent = generationKw.toFixed(2);
+        // Build detailed text with all generators' participation
+        const generators = data.generation?.generators || [];
+        let generationText = generationKw.toFixed(2);
+        
+        if (generators.length > 0) {
+            // Add breakdown by generator
+            const breakdown = generators
+                .filter(g => g.myPower > 0)
+                .map(g => `${g.name}: ${(g.myPower / 1000).toFixed(2)} kW (${g.participation}%)`)
+                .join('\n');
+            
+            if (breakdown) {
+                generationValueEl.title = `Desglossament:\n${breakdown}`;
+            }
+        }
+        
+        generationValueEl.textContent = generationText;
     }
 
     if (generationFillEl) {
@@ -520,6 +536,9 @@ function updateRealtimePowerUI(data) {
         selfConsumptionEl.textContent = `${selfConsumption.toFixed(1)}%`;
     }
     
+    // Update or create generator breakdown list
+    updateGeneratorBreakdown(data.generation?.generators || []);
+    
     // Update last update time
     const lastUpdateEl = document.querySelector('#powerLastUpdate span');
     if (lastUpdateEl && data.consumption?.timestamp) {
@@ -534,6 +553,74 @@ function updateRealtimePowerUI(data) {
             lucide.createIcons();
         }
     }, 100);
+}
+
+// Update or create the generator breakdown display
+function updateGeneratorBreakdown(generators) {
+    const powerOverviewCard = document.querySelector('.power-overview-card');
+    if (!powerOverviewCard) return;
+
+    // Check if breakdown already exists
+    let breakdownContainer = powerOverviewCard.querySelector('.generator-breakdown');
+    
+    if (!breakdownContainer) {
+        // Create the breakdown container after the power-balance element
+        breakdownContainer = document.createElement('div');
+        breakdownContainer.className = 'generator-breakdown';
+        breakdownContainer.innerHTML = `
+            <div class="breakdown-header">
+                <i data-lucide="factory"></i>
+                <span>Generadors amb Participació</span>
+            </div>
+            <div class="breakdown-list" id="generatorBreakdownList">
+                <!-- Generator items will be inserted here -->
+            </div>
+        `;
+        
+        const powerBalance = powerOverviewCard.querySelector('.power-balance');
+        if (powerBalance) {
+            powerBalance.after(breakdownContainer);
+        } else {
+            powerOverviewCard.appendChild(breakdownContainer);
+        }
+    }
+
+    const breakdownList = document.getElementById('generatorBreakdownList');
+    if (!breakdownList) return;
+
+    // Filter generators with participation
+    const activeGenerators = generators.filter(g => g.participation > 0);
+
+    if (activeGenerators.length === 0) {
+        breakdownList.innerHTML = '<div class="breakdown-empty">No hi ha generadors amb participació activa</div>';
+        return;
+    }
+
+    // Create breakdown items
+    breakdownList.innerHTML = activeGenerators.map(generator => {
+        const myPowerKw = (generator.myPower / 1000).toFixed(2);
+        const totalPowerKw = (generator.totalPower / 1000).toFixed(2);
+        
+        return `
+            <div class="breakdown-item">
+                <div class="breakdown-item-header">
+                    <span class="breakdown-name">${generator.name}</span>
+                    <span class="breakdown-participation">${generator.participation}%</span>
+                </div>
+                <div class="breakdown-item-details">
+                    <span class="breakdown-power">La meva part: <strong>${myPowerKw} kW</strong></span>
+                    <span class="breakdown-total">Total: ${totalPowerKw} kW</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Initialize Lucide icons
+    setTimeout(() => {
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }, 50);
 }
 
 function initializeLucideIcons() {
