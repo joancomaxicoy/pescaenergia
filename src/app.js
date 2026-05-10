@@ -62,7 +62,7 @@ class ExpressApp {
 
     // Cookie parser
     this.app.use(cookieParser());
-
+    
     // Seguridad (configurar CSP para permitir Google APIs)
     this.app.use(helmet({
       contentSecurityPolicy: {
