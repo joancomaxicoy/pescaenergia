@@ -1,3 +1,6 @@
+// Forzar carga de .env al inicio
+require('dotenv').config();
+
 const nodemailer = require('nodemailer');
 const handlebars = require('handlebars');
 const fs = require('fs').promises;
@@ -8,30 +11,49 @@ class EmailService {
   constructor() {
     this.transporter = null;
     this.templates = new Map();
-    this.init();
+    this.initialized = false;
+    // NO llamamos a init() aquí - inicialización lazy
   }
 
-  async init() {
+  async ensureInitialized() {
+    if (this.initialized && this.transporter) return;
+
     try {
+      console.log('📧 Inicializando servicio de email...');
+
+      // Leer variables de entorno
+      const host = process.env.SERVIDOR_SMTP || 'smtp.gmail.com';
+      const port = parseInt(process.env.PUERTO_SMTP) || 587;
+      const user = process.env.SMTP_USER || 'app.pescaenergia@gmail.com';
+      const pass = process.env.SMTP_PASSWORD;
+
+      console.log('📧 Configuración SMTP:', { host, port, user, hasPass: !!pass });
+
+      if (!pass) {
+        throw new Error('SMTP_PASSWORD no está definida en el archivo .env');
+      }
+
       // Configurar el transportador SMTP
       this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_SERVER,
-        port: parseInt(process.env.SMTP_PORT),
-        secure: false, // true para 465, false para otros puertos
+        host: host,
+        port: port,
+        secure: port === 465, // true para 465, false para otros puertos
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASSWORD,
+          user: user,
+          pass: pass,
         },
       });
 
       // Verificar la conexión
       await this.transporter.verify();
-      logger.info('Servicio de email configurado correctamente');
+      logger.info('✅ Servicio de email configurado correctamente');
 
-      // Precargar plantillas
+      // Precargar plantillas (opcional, no crítico)
       await this.loadTemplates();
+
+      this.initialized = true;
     } catch (error) {
-      logger.error('Error configurando servicio de email:', error);
+      logger.error('❌ Error configurando servicio de email:', error);
       throw error;
     }
   }
@@ -40,63 +62,64 @@ class EmailService {
     try {
       const templatesDir = path.join(__dirname, '../templates');
       const partialsDir = path.join(templatesDir, 'partials');
-      
-      // Registrar partials de Handlebars
-      const headerPartial = await fs.readFile(
-        path.join(partialsDir, 'header.hbs'),
-        'utf8'
-      );
-      handlebars.registerPartial('header', headerPartial);
 
-      const footerPartial = await fs.readFile(
-        path.join(partialsDir, 'footer.hbs'),
-        'utf8'
-      );
-      handlebars.registerPartial('footer', footerPartial);
+      // Verificar si existen los directorios
+      try {
+        await fs.access(templatesDir);
+      } catch (error) {
+        logger.warn(`Directorio de plantillas no encontrado: ${templatesDir}`);
+        return;
+      }
 
-      // Cargar plantilla de verificación de email
-      const emailVerificationTemplate = await fs.readFile(
-        path.join(templatesDir, 'email-verification.hbs'),
-        'utf8'
-      );
-      this.templates.set('email-verification', handlebars.compile(emailVerificationTemplate));
+      // Registrar partials si existen
+      try {
+        const headerPartial = await fs.readFile(
+          path.join(partialsDir, 'header.hbs'),
+          'utf8'
+        );
+        handlebars.registerPartial('header', headerPartial);
 
-      // Cargar plantilla de reset de password
-      const passwordResetTemplate = await fs.readFile(
-        path.join(templatesDir, 'password-reset.hbs'),
-        'utf8'
-      );
-      this.templates.set('password-reset', handlebars.compile(passwordResetTemplate));
+        const footerPartial = await fs.readFile(
+          path.join(partialsDir, 'footer.hbs'),
+          'utf8'
+        );
+        handlebars.registerPartial('footer', footerPartial);
+      } catch (error) {
+        logger.warn('No se pudieron cargar los partials:', error.message);
+      }
 
-      // Cargar plantilla de bienvenida
-      const welcomeTemplate = await fs.readFile(
-        path.join(templatesDir, 'welcome.hbs'),
-        'utf8'
-      );
-      this.templates.set('welcome', handlebars.compile(welcomeTemplate));
+      // Cargar plantillas (con manejo de errores)
+      const templates = ['email-verification', 'password-reset', 'welcome', 'test-email'];
+      for (const templateName of templates) {
+        try {
+          const templatePath = path.join(templatesDir, `${templateName}.hbs`);
+          const templateContent = await fs.readFile(templatePath, 'utf8');
+          this.templates.set(templateName, handlebars.compile(templateContent));
+          logger.info(`Plantilla ${templateName} cargada correctamente`);
+        } catch (error) {
+          logger.warn(`Plantilla ${templateName} no encontrada:`, error.message);
+        }
+      }
 
-      // Cargar plantilla de test de email
-      const testEmailTemplate = await fs.readFile(
-        path.join(templatesDir, 'test-email.hbs'),
-        'utf8'
-      );
-      this.templates.set('test-email', handlebars.compile(testEmailTemplate));
-
-      logger.info('Plantillas de email y partials cargados correctamente');
+      logger.info('Plantillas de email cargadas correctamente');
     } catch (error) {
       logger.error('Error cargando plantillas de email:', error);
-      throw error;
     }
   }
 
   async sendEmailVerification(user, verificationToken) {
+    await this.ensureInitialized();
+
     try {
       const template = this.templates.get('email-verification');
       if (!template) {
-        throw new Error('Plantilla de verificación de email no encontrada');
+        // Si no hay plantilla, usar texto simple
+        logger.warn('Plantilla no encontrada, usando texto simple');
+        return await this.sendSimpleEmail(user.email, 'Verifica tu cuenta',
+          `Hola ${user.name}, verifica tu cuenta usando este token: ${verificationToken}`);
       }
 
-      const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/area-usuari/verificar/${verificationToken}`;
+      const verificationUrl = `${process.env.URL_DE_FRONTEND || 'http://localhost:3000'}/area-usuari/verificar/${verificationToken}`;
 
       const html = template({
         userName: user.name,
@@ -113,20 +136,13 @@ class EmailService {
         to: user.email,
         subject: 'Verifica tu cuenta en PescaEnergia',
         html,
-        attachments: [
-          {
-            filename: 'pescaenergia-logo.png',
-            path: path.join(__dirname, '../../resources/pescaenergia-logo.png'),
-            cid: 'logo'
-          }
-        ]
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      logger.info('Email de verificación enviado', { 
-        userId: user.id, 
+      logger.info('Email de verificación enviado', {
+        userId: user.id,
         email: user.email,
-        messageId: result.messageId 
+        messageId: result.messageId
       });
 
       return result;
@@ -137,13 +153,17 @@ class EmailService {
   }
 
   async sendPasswordReset(user, resetToken) {
+    await this.ensureInitialized();
+
     try {
       const template = this.templates.get('password-reset');
       if (!template) {
-        throw new Error('Plantilla de reset de password no encontrada');
+        logger.warn('Plantilla no encontrada, usando texto simple');
+        return await this.sendSimpleEmail(user.email, 'Restablece tu contraseña',
+          `Hola ${user.name}, restablece tu contraseña usando este token: ${resetToken}`);
       }
 
-      const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/area-usuari/reset-password/${resetToken}`;
+      const resetUrl = `${process.env.URL_DE_FRONTEND || 'http://localhost:3000'}/area-usuari/reset-password/${resetToken}`;
 
       const html = template({
         userName: user.name,
@@ -160,20 +180,13 @@ class EmailService {
         to: user.email,
         subject: 'Restablece tu contraseña en PescaEnergia',
         html,
-        attachments: [
-          {
-            filename: 'pescaenergia-logo.png',
-            path: path.join(__dirname, '../../resources/pescaenergia-logo.png'),
-            cid: 'logo'
-          }
-        ]
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      logger.info('Email de reset de password enviado', { 
-        userId: user.id, 
+      logger.info('Email de reset de password enviado', {
+        userId: user.id,
         email: user.email,
-        messageId: result.messageId 
+        messageId: result.messageId
       });
 
       return result;
@@ -184,15 +197,19 @@ class EmailService {
   }
 
   async sendWelcomeEmail(user) {
+    await this.ensureInitialized();
+
     try {
       const template = this.templates.get('welcome');
       if (!template) {
-        throw new Error('Plantilla de bienvenida no encontrada');
+        logger.warn('Plantilla no encontrada, usando texto simple');
+        return await this.sendSimpleEmail(user.email, 'Bienvenido a PescaEnergia',
+          `Hola ${user.name}, bienvenido a PescaEnergia`);
       }
 
       const html = template({
         userName: user.name,
-        loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/area-usuari/login`,
+        loginUrl: `${process.env.URL_DE_FRONTEND || 'http://localhost:3000'}/area-usuari/login`,
         logoUrl: 'cid:logo',
         currentYear: new Date().getFullYear()
       });
@@ -205,72 +222,41 @@ class EmailService {
         to: user.email,
         subject: '¡Bienvenido a PescaEnergia!',
         html,
-        attachments: [
-          {
-            filename: 'pescaenergia-logo.png',
-            path: path.join(__dirname, '../../resources/pescaenergia-logo.png'),
-            cid: 'logo'
-          }
-        ]
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      logger.info('Email de bienvenida enviado', { 
-        userId: user.id, 
+      logger.info('Email de bienvenida enviado', {
+        userId: user.id,
         email: user.email,
-        messageId: result.messageId 
+        messageId: result.messageId
       });
 
       return result;
     } catch (error) {
       logger.error('Error enviando email de bienvenida:', error);
-      throw error;
+      // No lanzamos error para no interrumpir el flujo
     }
   }
 
   async sendTestEmail(to) {
+    await this.ensureInitialized();
+
     try {
-      const template = this.templates.get('test-email');
-      if (!template) {
-        throw new Error('Plantilla de test de email no encontrada');
-      }
-
-      const html = template({
-        logoUrl: 'cid:logo',
-        currentYear: new Date().getFullYear(),
-        smtpServer: process.env.SMTP_SERVER,
-        smtpPort: process.env.SMTP_PORT,
-        testDate: new Date().toLocaleString('es-ES', {
-          timeZone: 'Europe/Madrid',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      });
-
       const mailOptions = {
         from: {
           name: 'PescaEnergia',
           address: process.env.SMTP_USER
         },
-        to,
+        to: to,
         subject: 'Test de configuración SMTP - PescaEnergia',
-        html,
-        attachments: [
-          {
-            filename: 'pescaenergia-logo.png',
-            path: path.join(__dirname, '../../resources/pescaenergia-logo.png'),
-            cid: 'logo'
-          }
-        ]
+        text: 'Este es un email de prueba para verificar que la configuración SMTP funciona correctamente.',
+        html: '<h1>Email de prueba</h1><p>La configuración SMTP funciona correctamente.</p>'
       };
 
       const result = await this.transporter.sendMail(mailOptions);
-      logger.info('Email de test enviado', { 
+      logger.info('Email de test enviado', {
         email: to,
-        messageId: result.messageId 
+        messageId: result.messageId
       });
 
       return result;
@@ -279,9 +265,24 @@ class EmailService {
       throw error;
     }
   }
+
+  async sendSimpleEmail(to, subject, text) {
+    await this.ensureInitialized();
+
+    const mailOptions = {
+      from: {
+        name: 'PescaEnergia',
+        address: process.env.SMTP_USER
+      },
+      to: to,
+      subject: subject,
+      text: text,
+    };
+
+    return await this.transporter.sendMail(mailOptions);
+  }
 }
 
-// Singleton instance
+// Exportar una única instancia (sin inicializar automáticamente)
 const emailService = new EmailService();
-
 module.exports = emailService;
