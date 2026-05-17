@@ -85,7 +85,7 @@ class PowerEvaluator {
       // Obtener umbrales de potencia configurados (en kW)
       const powerOnThreshold = parseFloat(config.config.powerOnThreshold || config.config.power) || 0;
       const powerOffThreshold = parseFloat(config.config.powerOffThreshold) || (powerOnThreshold * 0.4); // Default: 40% del umbral ON
-      
+
       // Diferencia de potencia actual (generación - consumo) en Watts
       const differenceKW = currentPowerData[config.userId]?.difference || 0;
       const differenceW = differenceKW * 1000;
@@ -99,27 +99,27 @@ class PowerEvaluator {
         logger.warn('Umbral de encendido inválido', { powerOnThreshold });
         return null;
       }
-
-      if (powerOffThreshold < 0) {
+      //ojo modificat joan, se permite umbral de apagado en 0 o incluso negativo para casos donde se quiera apagar con cualquier exceso de generación
+      if (powerOffThreshold < -10) {
         logger.warn('Umbral de apagado inválido', { powerOffThreshold });
         return null;
       }
 
       if (powerOffThreshold >= powerOnThreshold) {
-        logger.warn('Umbral de apagado debe ser menor que umbral de encendido', { 
-          powerOnThreshold, 
-          powerOffThreshold 
+        logger.warn('Umbral de apagado debe ser menor que umbral de encendido', {
+          powerOnThreshold,
+          powerOffThreshold
         });
         return null;
       }
 
       // Lógica de histéresis
       let shouldBeOn;
-      
+
       if (currentDeviceState) {
         // Si el dispositivo está ENCENDIDO, solo apagar si cae por debajo del umbral de apagado
         shouldBeOn = differenceW >= offThresholdW;
-        
+
         logger.debug('Evaluación power (dispositivo ON)', {
           deviceId: config.deviceId,
           deviceName: config.deviceName,
@@ -131,7 +131,7 @@ class PowerEvaluator {
       } else {
         // Si el dispositivo está APAGADO, solo encender si supera el umbral de encendido
         shouldBeOn = differenceW >= onThresholdW;
-        
+
         logger.debug('Evaluación power (dispositivo OFF)', {
           deviceId: config.deviceId,
           deviceName: config.deviceName,
@@ -172,7 +172,7 @@ class PowerEvaluator {
       }
 
       const currentPowerData = await this.getPowerDifferenceCached(userIds);
-     
+
       const results = [];
 
 
@@ -180,10 +180,10 @@ class PowerEvaluator {
         try {
           // Obtener estado actual del dispositivo desde cache
           const currentDeviceState = this.memoryCache.getDeviceState(configData.deviceId)?.isOn || false;
-          
+
           // Evaluar con histéresis usando el estado actual
           const evaluation = this.evaluate(configData, currentPowerData, currentDeviceState);
-          
+
           results.push({
             deviceId: configData.deviceId,
             deviceName: configData.deviceName,

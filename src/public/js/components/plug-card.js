@@ -1,11 +1,12 @@
 /**
+ * fem un canvi aveure si nodemi arranca 
  * PlugCard Web Component
  * Componente autónomo para gestionar cada plug individual
  */
 class PlugCard extends HTMLElement {
     constructor() {
         super();
-        
+
         // Estado interno del plug
         this.plugData = null;
         this.isOnline = false;
@@ -17,7 +18,7 @@ class PlugCard extends HTMLElement {
         this.isLoading = false;
         this.lastUpdate = null;
         this.hasLoadedInitialStatus = false; // Nueva propiedad para controlar si se ha cargado el estado inicial
-        
+
         // Estado de automatización
         this.automationSlots = []; // Array dinámico de slots de automatización
         this.nextSlotId = 1; // ID incremental para nuevos slots
@@ -26,17 +27,17 @@ class PlugCard extends HTMLElement {
         this.automationMode = 'manual'; // 'manual', 'power', 'schedule'
         this.powerOnThreshold = 5; // Umbral de encendido en kW (por defecto 5 kW)
         this.powerOffThreshold = 2; // Umbral de apagado en kW (por defecto 2 kW)
-        
+
         // Control de visibilidad
         this.visibilityObserver = null;
         this.isVisible = false;
         this.visibilityDebounceTimeout = null;
-        
+
         // SSE para tiempo real
         this.isSSEActive = false;
         this.lastSSEMessage = null;
         this.sseManager = null;
-        
+
         // Bind methods
         this.handleToggle = this.handleToggle.bind(this);
         this.updateStatus = this.updateStatus.bind(this);
@@ -55,10 +56,10 @@ class PlugCard extends HTMLElement {
     connectedCallback() {
         this.render();
         this.setupEventListeners();
-        
+
         // Solicitar actualización de estado al dispositivo y luego cargar estado inicial
         this.requestInitialStatusUpdate();
-        
+
         // Cargar configuración de automatización desde el servidor
         this.loadAutomationConfig();
     }
@@ -543,6 +544,15 @@ class PlugCard extends HTMLElement {
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <span style="flex: 1;">Apagar quan l'excedent baixi de:</span>
                                         <select id="power-off-threshold" style="padding: 4px 8px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 13px; min-width: 80px;">
+                                            <option value=" -2">-2 kW</option>
+                                            <option value="-1.75">-1.75 kW</option>
+                                            <option value="-1.50">-1.50 kW</option>
+                                            <option value="-1.25">-1.25 kW</option>
+                                            <option value="-1">-1 kW</option>
+                                            <option value="-0.75">-0.75 kW</option>
+                                            <option value="-0.50">-0.50 kW</option>
+                                            <option value="-0.25">-0.25 kW</option>
+                                            <option value="0.0">0.0 kW</option>
                                             <option value="0.25">0.25 kW</option>
                                             <option value="0.5">0.5 kW</option>
                                             <option value="1">1 kW</option>
@@ -600,36 +610,36 @@ class PlugCard extends HTMLElement {
         if (toggleSwitch) {
             toggleSwitch.addEventListener('toggle-change', this.handleToggle);
         }
-        
+
         // Event listeners para slots de automatización
         this.addEventListener('time-slot-changed', this.handleSlotChange);
         this.addEventListener('time-slot-cleared', this.handleSlotClear);
-        
+
         // Event listener para el toggle de modo de automatización
         const automationModeToggle = this.querySelector('#automation-mode-toggle');
         if (automationModeToggle) {
             automationModeToggle.addEventListener('mode-change', this.handleAutomationModeChange.bind(this));
         }
-        
+
         // Event listeners para los selectores de potencia
         const powerOnThresholdSelect = this.querySelector('#power-on-threshold');
         if (powerOnThresholdSelect) {
             powerOnThresholdSelect.addEventListener('change', this.handlePowerOnThresholdChange.bind(this));
             powerOnThresholdSelect.value = this.powerOnThreshold; // Establecer valor inicial
         }
-        
+
         const powerOffThresholdSelect = this.querySelector('#power-off-threshold');
         if (powerOffThresholdSelect) {
             powerOffThresholdSelect.addEventListener('change', this.handlePowerOffThresholdChange.bind(this));
             powerOffThresholdSelect.value = this.powerOffThreshold; // Establecer valor inicial
         }
-        
+
         // Inicializar slots de automatización
         this.updateAutomationSlots();
-        
+
         // Actualizar estados de automatización
         this.updateAutomationModeDisplay();
-        
+
         // Generar configuración inicial
         this.generateAutomationConfig();
     }
@@ -646,21 +656,21 @@ class PlugCard extends HTMLElement {
 
         const newState = event.detail.checked;
         const previousState = this.isOn;
-        
+
         // 1. Actualización del estado interno (sin forzar la UI del switch)
         this.isOn = newState;
         this.updateStatusTextOnly(); // Solo actualizar texto de estado, no el switch
-        
+
         // 2. Mostrar brevemente estado "enviando"
         this.setLoading(true);
 
         try {
             // 3. Determinar la acción específica basada en el nuevo estado
             const action = newState ? 'on' : 'off';
-            
+
             // 4. Enviar comando al endpoint de control
-            const response = await window.apiClient.post(`/api/plugs/${this.plugData.id}/control`, { 
-                action: action 
+            const response = await window.apiClient.post(`/api/plugs/${this.plugData.id}/control`, {
+                action: action
             });
 
             // 5. Emitir evento personalizado de éxito
@@ -681,7 +691,7 @@ class PlugCard extends HTMLElement {
 
         } catch (error) {
             console.error('Error toggling plug:', error);
-            
+
             // 6. Revertir estado visual si hay error
             this.isOn = previousState;
             const toggleSwitch = this.querySelector('#toggle-switch');
@@ -689,7 +699,7 @@ class PlugCard extends HTMLElement {
                 toggleSwitch.setCheckedSilently(previousState);
             }
             this.updateStatusTextOnly(); // Solo actualizar texto, el switch ya está revertido
-            
+
             // 7. Emitir evento de error
             this.dispatchEvent(new CustomEvent('plug-error', {
                 detail: {
@@ -713,13 +723,13 @@ class PlugCard extends HTMLElement {
      */
     async updateStatus() {
         if (!this.plugData) return;
-        
+
         // Si SSE está activo, no hacer polling
         if (this.isSSEActive) {
             console.log(`SSE activo para ${this.plugData.device_name}, omitiendo polling`);
             return;
         }
-        
+
         try {
             const response = await window.apiClient.get(`/api/plugs/${this.plugData.id}/status`);
             const data = response.data;
@@ -759,7 +769,7 @@ class PlugCard extends HTMLElement {
      * @param {Object} data - Datos del mensaje SSE
      */
     handleSSEMessage(data) {
-       
+
         if (!this.plugData || !data) return;
 
         try {
@@ -783,23 +793,23 @@ class PlugCard extends HTMLElement {
             // Extraer datos del payload
             const wasOnline = this.isOnline;
             const wasOn = this.isOn;
-            
+
             // Actualizar estado interno con datos en tiempo real
             this.isOnline = true; // Si recibimos mensaje MQTT, el dispositivo está online
             this.isOn = payloadData.output || false;
             this.power = payloadData.apower || 0;
             this.voltage = payloadData.voltage || 0;
-            
+
             // Extraer temperatura si está disponible
             if (payloadData.temperature && payloadData.temperature.tC !== undefined) {
                 this.temperature = payloadData.temperature.tC;
             }
-            
+
             // Extraer energía total si está disponible
             if (payloadData.aenergy && payloadData.aenergy.total !== undefined) {
                 this.energy = payloadData.aenergy.total;
             }
-            
+
             // Actualizar timestamp
             this.lastUpdate = data.timestamp || new Date().toISOString();
             this.lastSSEMessage = data;
@@ -859,13 +869,13 @@ class PlugCard extends HTMLElement {
         const plugCard = this.querySelector('#plug-card');
         const plugMetrics = this.querySelector('#plug-metrics');
         const toggleSwitch = this.querySelector('#toggle-switch');
-        
+
         // Elementos de métricas reorganizadas
         const powerValue = this.querySelector('#power-value');
         const voltageValue = this.querySelector('#voltage-value');
         const tempValue = this.querySelector('#temp-value');
         const energyValue = this.querySelector('#energy-value');
-        
+
         const plugLastUpdate = this.querySelector('#plug-last-update');
         const lastUpdateText = this.querySelector('#last-update-text');
 
@@ -937,7 +947,7 @@ class PlugCard extends HTMLElement {
         } else {
             // Quitar clase offline si está online
             plugCard.classList.remove('offline');
-            
+
             if (this.isOn) {
                 text = 'Encès';
                 className += ' status-on';
@@ -949,7 +959,7 @@ class PlugCard extends HTMLElement {
             // Mostrar métricas si está online
             if (plugMetrics) {
                 plugMetrics.style.display = 'grid';
-                
+
                 // Actualizar métricas individuales con la nueva estructura
                 if (powerValue) {
                     // Si el dispositivo está apagado, mostrar "-" para potencia
@@ -989,7 +999,7 @@ class PlugCard extends HTMLElement {
         const statusText = this.querySelector('#status-text');
         const powerValue = this.querySelector('#power-value');
         const energyValue = this.querySelector('#energy-value');
-        
+
         if (!statusText) return;
 
         let text = '';
@@ -1005,7 +1015,7 @@ class PlugCard extends HTMLElement {
             if (this.isOn) {
                 text = 'Encès';
                 className += ' status-on';
-                
+
                 // Actualizar métricas cuando está encendido
                 if (powerValue) {
                     powerValue.textContent = `${this.power}W`;
@@ -1017,7 +1027,7 @@ class PlugCard extends HTMLElement {
             } else {
                 text = 'Apagat';
                 className += ' status-off';
-                
+
                 // Mostrar "-" cuando está apagado
                 if (powerValue) {
                     powerValue.textContent = `-`;
@@ -1038,7 +1048,7 @@ class PlugCard extends HTMLElement {
     setLoading(loading) {
         this.isLoading = loading;
         const toggleSwitch = this.querySelector('#toggle-switch');
-        
+
         if (toggleSwitch) {
             toggleSwitch.loading = loading;
             toggleSwitch.disabled = loading;
@@ -1111,11 +1121,11 @@ class PlugCard extends HTMLElement {
         }
     }
 
-   
+
     /**
      * Métodos públicos para control externo
      */
-    
+
     /**
      * Actualiza los datos del plug
      */
@@ -1153,12 +1163,12 @@ class PlugCard extends HTMLElement {
 
         try {
             console.log(`Requesting initial status update for plug ${this.plugData.device_name}`);
-            
+
             // Enviar comando status_update al dispositivo
             var ret = await window.apiClient.post(`/api/plugs/${this.plugData.id}/status_update`);
-            
+
             console.log(`Status update command sent to plug ${this.plugData.device_name}`);
-            
+
             // Esperar un poco para que el dispositivo procese el comando y luego obtener el estado
             setTimeout(() => {
                 this.updateStatus();
@@ -1176,12 +1186,12 @@ class PlugCard extends HTMLElement {
      */
     renderAutomationSlots() {
         let slotsHtml = '';
-        
+
         // Renderizar slots existentes
         this.automationSlots.forEach(slot => {
             slotsHtml += `<time-slot-selector class="automation-slot" data-slot-id="${slot.id}"></time-slot-selector>`;
         });
-        
+
         // Agregar icono discreto para añadir nuevo slot
         slotsHtml += `
             <div class="add-new-slot" id="add-new-slot">
@@ -1190,7 +1200,7 @@ class PlugCard extends HTMLElement {
                 </div>
             </div>
         `;
-        
+
         return slotsHtml;
     }
 
@@ -1201,18 +1211,18 @@ class PlugCard extends HTMLElement {
         const automationTableBody = this.querySelector('#automation-table-body');
         if (automationTableBody) {
             automationTableBody.innerHTML = this.renderAutomationSlots();
-            
+
             // Re-configurar event listeners para el botón de agregar
             const addNewSlotBtn = this.querySelector('#add-new-slot');
             if (addNewSlotBtn) {
                 addNewSlotBtn.addEventListener('click', this.addNewSlot);
             }
-            
+
             // Inicializar iconos de Lucide
             if (window.lucide) {
                 window.lucide.createIcons();
             }
-            
+
             // Configurar datos de slots existentes
             this.automationSlots.forEach(slot => {
                 const slotElement = this.querySelector(`[data-slot-id="${slot.id}"]`);
@@ -1231,10 +1241,10 @@ class PlugCard extends HTMLElement {
             id: this.nextSlotId++,
             data: null
         };
-        
+
         this.automationSlots.push(newSlot);
         this.updateAutomationSlots();
-        
+
         console.log(`Added new automation slot with ID: ${newSlot.id}`);
     }
 
@@ -1244,20 +1254,20 @@ class PlugCard extends HTMLElement {
     handleSlotChange(event) {
         const slotElement = event.target;
         const slotId = parseInt(slotElement.dataset.slotId);
-        
+
         if (slotId) {
             const slot = this.automationSlots.find(s => s.id === slotId);
             if (slot) {
                 slot.data = event.detail;
                 console.log(`Automation slot ${slotId} updated:`, event.detail);
-                
+
                 // Verificar si el slot tiene datos válidos, si no, eliminarlo
                 if (!this.isValidSlotData(event.detail)) {
                     console.log(`Automation slot ${slotId} has no valid data, removing it`);
                     this.removeSlot(slotId);
                     return;
                 }
-                
+
                 // Generar y guardar configuración automáticamente
                 this.generateAutomationConfig();
                 this.saveAutomationConfig();
@@ -1271,16 +1281,16 @@ class PlugCard extends HTMLElement {
     handleSlotClear(event) {
         const slotElement = event.target;
         const slotId = parseInt(slotElement.dataset.slotId);
-        
+
         if (slotId) {
             // Eliminar el slot del array
             this.automationSlots = this.automationSlots.filter(s => s.id !== slotId);
-            
+
             // Actualizar la visualización
             this.updateAutomationSlots();
-            
+
             console.log(`Automation slot ${slotId} removed`);
-            
+
             // Aquí podrías enviar los datos actualizados al servidor
             this.saveAutomationConfig();
         }
@@ -1295,17 +1305,17 @@ class PlugCard extends HTMLElement {
             return;
         }
 
-        try { 
+        try {
             // Generar configuración en el formato esperado por el backend
             const config = this.generateAutomationConfig();
-            
+
             console.log('Guardando configuración de automatización:', config);
-            
+
             // Llamada al API para guardar la configuración
             const response = await window.apiClient.post(`/api/plugs/${this.plugData.id}/automation`, config);
-            
+
             console.log('✅ Configuración de automatización guardada exitosamente:', response.data);
-            
+
             // Emitir evento de éxito
             this.dispatchEvent(new CustomEvent('automation-saved', {
                 detail: {
@@ -1316,10 +1326,10 @@ class PlugCard extends HTMLElement {
                 },
                 bubbles: true
             }));
-            
+
         } catch (error) {
             console.error('❌ Error guardando configuración de automatización:', error);
-            
+
             // Emitir evento de error
             this.dispatchEvent(new CustomEvent('automation-error', {
                 detail: {
@@ -1343,22 +1353,22 @@ class PlugCard extends HTMLElement {
             this.initializeDefaultAutomation();
             return;
         }
-        
+
         try {
             console.log('Cargando configuración de automatización desde el servidor...');
-            
+
             // Llamada al API para cargar la configuración
             const response = await window.apiClient.get(`/api/plugs/${this.plugData.id}/automation`);
             const serverConfig = response.data;
-            
+
             console.log('✅ Configuración cargada desde el servidor:', serverConfig);
-            
+
             // Aplicar la configuración cargada
             this.applyServerConfig(serverConfig.automation);
-            
+
         } catch (error) {
             console.error('❌ Error cargando configuración de automatización:', error);
-            
+
             // Si hay error, inicializar con configuración por defecto
             this.initializeDefaultAutomation();
         }
@@ -1375,21 +1385,21 @@ class PlugCard extends HTMLElement {
 
         // Aplicar tipo de automatización
         this.automationMode = automation.type || 'manual';
-        
+
         // Aplicar umbrales de potencia con valores por defecto
         this.powerOnThreshold = parseFloat(automation.powerOnThreshold || automation.power) || 5;
         this.powerOffThreshold = parseFloat(automation.powerOffThreshold) || (this.powerOnThreshold * 0.4);
-        
+
         // Asegurar que powerOffThreshold sea menor que powerOnThreshold
         if (this.powerOffThreshold >= this.powerOnThreshold) {
             this.powerOffThreshold = this.powerOnThreshold * 0.4;
             console.warn('powerOffThreshold ajustado para ser menor que powerOnThreshold');
         }
-        
+
         // Limpiar slots existentes
         this.automationSlots = [];
         this.nextSlotId = 1;
-        
+
         // Aplicar slots de horario si existen
         if (automation.schedule && Array.isArray(automation.schedule)) {
             automation.schedule.forEach(serverSlot => {
@@ -1405,16 +1415,16 @@ class PlugCard extends HTMLElement {
                 this.automationSlots.push(slot);
             });
         }
-        
+
         // Si no hay slots y el modo es schedule, agregar uno vacío
         if (this.automationMode === 'schedule' && this.automationSlots.length === 0) {
             this.addNewSlot();
         }
-        
+
         // Actualizar la UI
         this.updateAutomationModeFromConfig();
         this.updateAutomationSlots();
-        
+
         console.log('Configuración aplicada:', {
             mode: this.automationMode,
             powerOnThreshold: this.powerOnThreshold,
@@ -1432,14 +1442,14 @@ class PlugCard extends HTMLElement {
         this.powerOffThreshold = 2;
         this.automationSlots = [];
         this.nextSlotId = 1;
-        
+
         // Agregar un slot vacío para el modo schedule
         this.addNewSlot();
-        
+
         // Actualizar la UI
         this.updateAutomationModeFromConfig();
         this.updateAutomationSlots();
-        
+
         console.log('Configuración por defecto inicializada');
     }
 
@@ -1461,20 +1471,20 @@ class PlugCard extends HTMLElement {
                     modeIndex = 2;
                     break;
             }
-            
+
             // Establecer el modo sin disparar eventos
             automationModeToggle.setAttribute('mode', modeIndex.toString());
-            
+
             // Actualizar la visualización
             this.updateAutomationModeDisplay(modeIndex);
         }
-        
+
         // Actualizar los selectores de potencia
         const powerOnThresholdSelect = this.querySelector('#power-on-threshold');
         if (powerOnThresholdSelect) {
             powerOnThresholdSelect.value = this.powerOnThreshold;
         }
-        
+
         const powerOffThresholdSelect = this.querySelector('#power-off-threshold');
         if (powerOffThresholdSelect) {
             powerOffThresholdSelect.value = this.powerOffThreshold;
@@ -1486,17 +1496,17 @@ class PlugCard extends HTMLElement {
      */
     isValidSlotData(slotData) {
         if (!slotData) return false;
-        
+
         // Verificar que tenga días seleccionados
         if (!slotData.selectedDays || slotData.selectedDays.length === 0) {
             return false;
         }
-        
+
         // Verificar que tenga horarios configurados
         if (!slotData.startTime || !slotData.endTime) {
             return false;
         }
-        
+
         return true;
     }
 
@@ -1506,12 +1516,12 @@ class PlugCard extends HTMLElement {
     removeSlot(slotId) {
         // Eliminar el slot del array
         this.automationSlots = this.automationSlots.filter(s => s.id !== slotId);
-        
+
         // Actualizar la visualización
         this.updateAutomationSlots();
-        
+
         console.log(`Automation slot ${slotId} removed due to invalid data`);
-        
+
         // Guardar configuración actualizada
         this.saveAutomationConfig();
     }
@@ -1566,7 +1576,7 @@ class PlugCard extends HTMLElement {
     handleAutomationModeChange(event) {
         const mode = event.detail.index;
         const modeValue = event.detail.value;
-        
+
         // Actualizar el modo interno
         switch (mode) {
             case 0:
@@ -1579,12 +1589,12 @@ class PlugCard extends HTMLElement {
                 this.automationMode = 'schedule';
                 break;
         }
-        
+
         console.log(`Automation mode changed to: ${modeValue} (${mode})`);
-        
+
         // Actualizar la visualización según el modo seleccionado
         this.updateAutomationModeDisplay(mode);
-        
+
         // Generar y guardar configuración automáticamente
         this.generateAutomationConfig();
         this.saveAutomationConfig();
@@ -1595,17 +1605,17 @@ class PlugCard extends HTMLElement {
      */
     handlePowerOnThresholdChange(event) {
         const newValue = parseFloat(event.target.value);
-        
+
         // Validar que el umbral ON sea mayor que el umbral OFF
         if (newValue <= this.powerOffThreshold) {
             alert(`El umbral d'encesa (${newValue} kW) ha de ser superior al d'apagat (${this.powerOffThreshold} kW)`);
             event.target.value = this.powerOnThreshold; // Revertir
             return;
         }
-        
+
         this.powerOnThreshold = newValue;
         console.log(`Power ON threshold changed to: ${this.powerOnThreshold} kW`);
-        
+
         // Generar y guardar configuración automáticamente
         this.generateAutomationConfig();
         this.saveAutomationConfig();
@@ -1616,17 +1626,17 @@ class PlugCard extends HTMLElement {
      */
     handlePowerOffThresholdChange(event) {
         const newValue = parseFloat(event.target.value);
-        
+
         // Validar que el umbral OFF sea menor que el umbral ON
         if (newValue >= this.powerOnThreshold) {
             alert(`El umbral d'apagat (${newValue} kW) ha de ser inferior al d'encesa (${this.powerOnThreshold} kW)`);
             event.target.value = this.powerOffThreshold; // Revertir
             return;
         }
-        
+
         this.powerOffThreshold = newValue;
         console.log(`Power OFF threshold changed to: ${this.powerOffThreshold} kW`);
-        
+
         // Generar y guardar configuración automáticamente
         this.generateAutomationConfig();
         this.saveAutomationConfig();
@@ -1639,12 +1649,12 @@ class PlugCard extends HTMLElement {
         const manualModeInfo = this.querySelector('#manual-mode-info');
         const powerAutomationTable = this.querySelector('#power-automation-table');
         const timeAutomationTable = this.querySelector('#time-automation-table');
-        
+
         // Ocultar todas las secciones primero
         if (manualModeInfo) manualModeInfo.style.display = 'none';
         if (powerAutomationTable) powerAutomationTable.style.display = 'none';
         if (timeAutomationTable) timeAutomationTable.style.display = 'none';
-        
+
         // Mostrar la sección correspondiente al modo seleccionado
         switch (mode) {
             case 0: // Manual
@@ -1684,7 +1694,7 @@ class PlugCard extends HTMLElement {
         };
 
         console.log(`🔧 Configuració d'automatització per ${this.plugData?.device_name || 'Plug'}:`, JSON.stringify(config, null, 2));
-        
+
         return config;
     }
 }

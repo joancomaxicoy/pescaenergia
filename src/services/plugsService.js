@@ -49,12 +49,12 @@ class PlugsService {
       this.logger.info('🔄 MQTT no disponible, reintentando conexión...');
       await this.initializeMqtt();
     }
-    
+
     // Verificar que realmente esté conectado
     if (!this.mqttService || !this.mqttService.isConnected) {
       throw new Error('No se pudo establecer conexión MQTT después de varios intentos');
     }
-    
+
     this.logger.debug('✅ Conexión MQTT verificada y disponible');
   }
 
@@ -68,10 +68,10 @@ class PlugsService {
         if (!this.mqttService || !this.mqttService.isConnected) {
           this.logger.warn('🔍 Health check: MQTT desconectado, reintentando conexión...');
           await this.initializeMqtt();
-          
+
           if (this.mqttService && this.mqttService.isConnected) {
             this.logger.info('✅ Health check: MQTT reconectado exitosamente');
-            
+
             // Reinicializar AutomationManager si MQTT se reconectó
             if (!this.automationManager) {
               await this.initializeAutomationManager();
@@ -86,7 +86,7 @@ class PlugsService {
         });
       }
     }, 120000); // Cada 2 minutos
-    
+
     this.logger.info('🔍 Health check MQTT iniciado (cada 2 minutos)');
   }
 
@@ -254,13 +254,13 @@ class PlugsService {
 
       // 3. Asignar devices al usuario y actualizar información
       const assignedPlugs = [];
-      
+
       for (const device of foundDevices) {
         try {
           // Extraer nombre del enchufe del shelly_device_id
           const deviceIdParts = device.shelly_device_id.split('/');
           const extractedName = deviceIdParts.length > 1 ? deviceIdParts[0] : device.shelly_device_id;
-          
+
           // Determinar el nombre final del device
           let finalDeviceName = device.device_name;
           if (!finalDeviceName || finalDeviceName.trim() === '') {
@@ -496,7 +496,7 @@ class PlugsService {
   async publishMqttCommandWithTimeout(topic, command, timeout = 10000) {
     return Promise.race([
       this.publishMqttCommand(topic, command),
-      new Promise((_, reject) => 
+      new Promise((_, reject) =>
         setTimeout(() => {
           reject(new Error(`Timeout enviando comando MQTT después de ${timeout}ms`));
         }, timeout)
@@ -627,10 +627,10 @@ class PlugsService {
 
       deviceStates.forEach(state => {
         // Determinar el valor basándose en el tipo de columna que tenga datos
-        let stateValue = state.state_value_string || 
-                        state.state_value_boolean || 
-                        state.state_value_numeric || 
-                        state.state_value_json;
+        let stateValue = state.state_value_string ||
+          state.state_value_boolean ||
+          state.state_value_numeric ||
+          state.state_value_json;
 
         switch (state.state_name) {
           case 'status_wifi_sta_ip':
@@ -657,7 +657,7 @@ class PlugsService {
 
       try {
         const metricsResult = await deviceHistoryService.getLatestMetrics(
-          plug.id, 
+          plug.id,
           ['status_switch:0_apower_avg', 'status_switch:0_temperature_tC_avg']
         );
 
@@ -678,8 +678,8 @@ class PlugsService {
       const isOn = switchOutput === 'true' || switchOutput === true;
 
       // Usar el timestamp más reciente entre device_states y metrics
-      const finalLastUpdate = metricsTimestamp && (!lastUpdate || new Date(metricsTimestamp) > new Date(lastUpdate)) 
-        ? metricsTimestamp 
+      const finalLastUpdate = metricsTimestamp && (!lastUpdate || new Date(metricsTimestamp) > new Date(lastUpdate))
+        ? metricsTimestamp
         : lastUpdate || new Date().toISOString();
 
       // Calcular isOnline basándose en finalLastUpdate (< 15 minutos)
@@ -847,7 +847,7 @@ class PlugsService {
       if (result.rows.length > 0) {
         const config = result.rows[0];
         automationConfig = config.config_data;
-        
+
         this.logger.info('Configuración de automatización encontrada', {
           plugId,
           userId,
@@ -1066,8 +1066,8 @@ class PlugsService {
     }
 
     if (config.powerOffThreshold !== undefined) {
-      if (typeof config.powerOffThreshold !== 'number' || config.powerOffThreshold < 0 || config.powerOffThreshold > 100) {
-        throw new Error('El umbral de apagado debe ser un número entre 0 y 100 kW');
+      if (typeof config.powerOffThreshold !== 'number' || config.powerOffThreshold < -10 || config.powerOffThreshold > 100) {
+        throw new Error('El umbral de apagado debe ser un número entre -10 y 100 kW') // ojo modifict joan ;
       }
     }
 
@@ -1130,7 +1130,7 @@ class PlugsService {
 
     // Validar horarios
     const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    
+
     if (!slot.startTime || !timeRegex.test(slot.startTime)) {
       throw new Error(`El slot de horario ${index + 1} debe tener una hora de inicio válida (HH:MM)`);
     }
@@ -1161,13 +1161,13 @@ class PlugsService {
       // Reutilizar la lógica del DashboardService
       const DashboardService = require('./dashboardService');
       const dashboardService = new DashboardService();
-      
+
       // Obtener datos históricos del dashboard (incluye consumo y generación)
       const dashboardData = await dashboardService.getHistoricalChartData(userId, period);
-      
+
       // Obtener todos los plugs del usuario
       const userPlugs = await this.getUserPlugs(userId);
-      
+
       if (userPlugs.length === 0) {
         // Si no hay plugs, retornar solo datos de generación y consumo total
         return {
@@ -1178,7 +1178,7 @@ class PlugsService {
 
       // Calcular fechas según el período
       const { startDate, endDate, aggregation } = this.calculatePeriodParams(period);
-      
+
       // Obtener datos históricos para cada plug individual
       const deviceHistoryService = new DeviceHistoryService();
       const plugDataPromises = userPlugs.map(async (plug) => {
@@ -1190,7 +1190,7 @@ class PlugsService {
             endDate,
             aggregation
           );
-          
+
           return {
             plugId: plug.id,
             plugName: plug.device_name,
@@ -1211,13 +1211,13 @@ class PlugsService {
       });
 
       const plugsData = await Promise.all(plugDataPromises);
-      
+
       // Crear conjunto unificado de timestamps (usar los del dashboard)
       const sortedTimestamps = dashboardData.labels.map((label, index) => {
         // Convertir label de vuelta a timestamp ISO
         const now = new Date();
         let timestamp;
-        
+
         if (period === '24h') {
           // Para 24h, los labels son "HH:MM"
           const [hours, minutes] = label.split(':');
@@ -1232,13 +1232,13 @@ class PlugsService {
           const intervalMs = totalPeriodMs / dashboardData.labels.length;
           timestamp = new Date(now.getTime() - totalPeriodMs + (index * intervalMs));
         }
-        
+
         return timestamp.toISOString();
       });
 
       // Preparar datasets
       const datasets = [];
-      
+
       // 1. Datasets de generación (del dashboard)
       const generationDatasets = dashboardData.datasets.filter(d => d.type === 'generation');
       generationDatasets.forEach(dataset => {
@@ -1254,10 +1254,10 @@ class PlugsService {
         '#1e40af', '#7c3aed', '#dc2626', '#ea580c', '#ca8a04',
         '#16a34a', '#0891b2', '#c2410c', '#9333ea', '#be123c'
       ];
-      
+
       plugsData.forEach((plugData, index) => {
         const plugMap = new Map();
-        
+
         // Mapear los datos del plug por timestamp
         plugData.data.forEach(point => {
           if (point && point.timestamp && point.value !== undefined) {
@@ -1268,13 +1268,13 @@ class PlugsService {
         });
 
         const color = plugColors[index % plugColors.length];
-        
+
         // Mapear los datos a los timestamps del dashboard
         const mappedData = sortedTimestamps.map(timestamp => {
           // Buscar el valor más cercano en tiempo
           let closestValue = null;
           let minTimeDiff = Infinity;
-          
+
           for (const [plugTimestamp, value] of plugMap.entries()) {
             const timeDiff = Math.abs(new Date(timestamp).getTime() - new Date(plugTimestamp).getTime());
             if (timeDiff < minTimeDiff && timeDiff < 30 * 60 * 1000) { // Máximo 30 minutos de diferencia
@@ -1282,10 +1282,10 @@ class PlugsService {
               closestValue = value;
             }
           }
-          
+
           return closestValue;
         });
-        
+
         datasets.push({
           label: plugData.plugName,
           data: mappedData,
@@ -1294,7 +1294,7 @@ class PlugsService {
           type: 'plug_consumption',
           stack: 'consumption'
         });
-        
+
         // Log para debug
         this.logger.debug('Datos del plug mapeados', {
           plugName: plugData.plugName,
@@ -1307,7 +1307,7 @@ class PlugsService {
       // 3. Calcular resto de consumo (consumo total - suma de plugs)
       const restConsumptionData = sortedTimestamps.map(timestamp => {
         const index = sortedTimestamps.indexOf(timestamp);
-        
+
         // Sumar todo el consumo total en este timestamp
         const totalConsumption = dashboardData.datasets
           .filter(d => d.type === 'consumption')
@@ -1326,7 +1326,7 @@ class PlugsService {
 
         // Calcular resto
         const rest = totalConsumption - totalPlugs;
-        
+
         // Solo retornar valor si hay datos de consumo
         return totalConsumption > 0 ? Math.max(0, rest) : null;
       });
@@ -1473,7 +1473,7 @@ class PlugsService {
       }
 
       const stats = this.automationManager.getStats();
-      
+
       return {
         available: true,
         system: 'new_automation_manager',
@@ -1482,8 +1482,8 @@ class PlugsService {
       };
 
     } catch (error) {
-      this.logger.error('Error obteniendo estadísticas de automatización', { 
-        error: error.message 
+      this.logger.error('Error obteniendo estadísticas de automatización', {
+        error: error.message
       });
 
       return {
@@ -1509,7 +1509,7 @@ class PlugsService {
       }
 
       const debugInfo = this.automationManager.getDebugInfo();
-      
+
       return {
         available: true,
         system: 'new_automation_manager',
@@ -1518,8 +1518,8 @@ class PlugsService {
       };
 
     } catch (error) {
-      this.logger.error('Error obteniendo debug info de automatización', { 
-        error: error.message 
+      this.logger.error('Error obteniendo debug info de automatización', {
+        error: error.message
       });
 
       return {

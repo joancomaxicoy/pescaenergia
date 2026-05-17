@@ -26,6 +26,7 @@ class ExpressApp {
   constructor() {
     this.app = express();
     this.port = process.env.PORT || 3000;
+    this.host = process.env.HOST || '0.0.0.0';  // AFEGIR AIXÒ
     this.setupMiddleware();
     this.setupSwagger();
     this.setupRoutes();
@@ -62,7 +63,7 @@ class ExpressApp {
 
     // Cookie parser
     this.app.use(cookieParser());
-    
+
     // Seguridad (configurar CSP para permitir Google APIs)
     this.app.use(helmet({
       contentSecurityPolicy: {
@@ -77,7 +78,7 @@ class ExpressApp {
         }
       }
     }));
-    
+
     // CORS - Configuración para Google Sign-In
     this.app.use(cors({
       origin: [
@@ -390,7 +391,7 @@ class ExpressApp {
           timestamp: new Date().toISOString()
         });
       }
-      
+
       // Para otras rutas, mostrar página 404
       res.status(404).render('pages/404', {
         title: 'Pàgina no trobada',

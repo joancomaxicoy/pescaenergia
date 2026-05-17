@@ -2,8 +2,8 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const authService = require('../services/authService');
 const emailService = require('../services/emailService');
-const { 
-  authenticateToken, 
+const {
+  authenticateToken,
   requireEmailValidation,
   logAuthAction,
   validateUserExists
@@ -151,7 +151,7 @@ const passwordResetLimiter = rateLimit({
  *       409:
  *         description: Usuario ya existe
  */
-router.post('/register', 
+router.post('/register',
   registerLimiter,
   sanitizeInput,
   validateRegister,
@@ -162,7 +162,7 @@ router.post('/register',
       res.status(201).json(result);
     } catch (error) {
       logger.error('Error en registro:', error);
-      
+
       if (error.message.includes('Ya existe un usuario')) {
         return res.status(409).json({
           error: error.message,
@@ -222,7 +222,7 @@ router.post('/login',
       res.json(result);
     } catch (error) {
       logger.error('Error en login:', error);
-      
+
       if (error.code === 'EMAIL_NOT_VERIFIED') {
         return res.status(403).json({
           error: error.message,
@@ -712,9 +712,9 @@ router.post('/set-initial-password',
       res.json(result);
     } catch (error) {
       logger.error('Error estableciendo password inicial:', error);
-      
-      if (error.message.includes('Token de verificació invàlid') || 
-          error.message.includes('caducat')) {
+
+      if (error.message.includes('Token de verificació invàlid') ||
+        error.message.includes('caducat')) {
         return res.status(400).json({
           error: 'Token inválido o expirado',
           code: 'INVALID_TOKEN'
