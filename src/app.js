@@ -20,6 +20,7 @@ const userParticipationRoutes = require('./routes/userParticipation');
 const dashboardRoutes = require('./routes/dashboard');
 const adminRoutes = require('./routes/admin');
 const plugsRoutes = require('./routes/plugs');
+const automationRoutes = require('./routes/automation');
 const sseRoutes = require('./routes/sse');
 
 class ExpressApp {
@@ -349,6 +350,7 @@ class ExpressApp {
     this.app.use('/api/dashboard', dashboardRoutes);
     this.app.use('/api/admin', adminRoutes);
     this.app.use('/api/plugs', plugsRoutes);
+    this.app.use('/api/automation', automationRoutes);
     this.app.use('/api/sse', sseRoutes);
 
     // Rutas del frontend (área de usuario)

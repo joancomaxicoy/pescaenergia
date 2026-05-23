@@ -179,7 +179,7 @@ class PowerEvaluator {
       for (const configData of configs) {
         try {
           // Obtener estado actual del dispositivo desde cache
-          const currentDeviceState = this.memoryCache.getDeviceState(configData.deviceId)?.isOn || false;
+          const currentDeviceState = this.memoryCache.getDeviceState(configData.deviceId)?.output || false;
 
           // Evaluar con histéresis usando el estado actual
           const evaluation = this.evaluate(configData, currentPowerData, currentDeviceState);
