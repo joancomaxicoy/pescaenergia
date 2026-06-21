@@ -66,6 +66,7 @@ class PowerEvaluator {
       timestamp: Date.now()
     });
 
+    //console.log('Datos de potencia obtenidos y almacenados en cache', { cacheKey, userIds, freshData });
     return freshData;
   }
 
@@ -81,6 +82,7 @@ class PowerEvaluator {
    * @returns {boolean|null} - true si debe estar ON, false si debe estar OFF, null si no hay cambio
    */
   evaluate(config, currentPowerData, currentDeviceState = false) {
+    console.log('Evaluando configuración de power', { config, currentPowerData, currentDeviceState });
     try {
       // Obtener umbrales de potencia configurados (en kW)
       const powerOnThreshold = parseFloat(config.config.powerOnThreshold || config.config.power) || 0;
@@ -114,11 +116,17 @@ class PowerEvaluator {
       }
 
       // Lógica de histéresis
-      let shouldBeOn;
+
+      //es el bit de on i off entic 
+      let shouldBeOn = false;
+      // afegit per fer proves tenim un bit de stop 
+      let shouldBeOff = false;
 
       if (currentDeviceState) {
         // Si el dispositivo está ENCENDIDO, solo apagar si cae por debajo del umbral de apagado
         shouldBeOn = differenceW >= offThresholdW;
+        // afegit per fer proves, si el umbral de apagado se cumple, se activa un bit de stop que podria ser usat per altres automatitzacions o alertes
+        shouldBeOff = offThresholdW >= differenceW;
 
         logger.debug('Evaluación power (dispositivo ON)', {
           deviceId: config.deviceId,
@@ -141,7 +149,7 @@ class PowerEvaluator {
           decision: shouldBeOn ? 'ENCENDER' : 'MANTENER OFF'
         });
       }
-
+      console.log('Resultado de evaluación de power', { deviceId: config.deviceId, deviceName: config.deviceName, shouldBeOn, shouldBeOff });
       return shouldBeOn;
 
     } catch (error) {
@@ -218,7 +226,7 @@ class PowerEvaluator {
         offDevices: results.filter(r => r.evaluation === false).length,
         errors: results.filter(r => r.error).length
       });
-
+      // console.log('Evaluación múltiple de power completada', { results }); 
       return results;
 
     } catch (error) {

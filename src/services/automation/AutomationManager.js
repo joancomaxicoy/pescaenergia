@@ -23,17 +23,17 @@ class AutomationManager {
 
     this.plugsService = plugsService;
     this.mqttService = mqttService;
-    
+
     // Componentes principales
     this.memoryCache = new MemoryCache();
     this.scheduleEvaluator = new ScheduleEvaluator();
     this.powerEvaluator = new PowerEvaluator(this.memoryCache);
-   
+
     // Timer de ejecución
     this.executionTimer = null;
     this.isRunning = false;
     this.executionInterval = parseInt(process.env.AUTOMATION_TIMER_INTERVAL) || 1; // segundos
-    
+
     // Estadísticas
     this.stats = {
       cyclesExecuted: 0,
@@ -46,7 +46,7 @@ class AutomationManager {
       lastCycleTime: null,
       lastCycleDuration: 0
     };
-    
+
     // Configuración de eventos MQTT
     this.mqttHandlerRegistered = false;
 
@@ -92,18 +92,18 @@ class AutomationManager {
   async initialize() {
     try {
       logger.info('Inicializando AutomationManager...');
-      
+
       // Inicializar cache en memoria
       await this.memoryCache.initialize();
-    
+
       // Registrar handler MQTT para eventos de potencia
       this.registerMqttHandler();
-      
+
       logger.info('AutomationManager inicializado exitosamente', {
         executionInterval: this.executionInterval + 's',
         cacheStats: this.memoryCache.getStats()
       });
-      
+
     } catch (error) {
       logger.error('Error inicializando AutomationManager:', error);
       throw error;
@@ -188,13 +188,13 @@ class AutomationManager {
   async executeCycle() {
     const cycleStartTime = Date.now();
     this.stats.lastCycleTime = new Date();
-    
+
     try {
       logger.debug('Iniciando ciclo de automatización');
       // Obtener todas las configuraciones activas
       const allConfigs = this.memoryCache.getAllAutomationConfigs();
 
-      
+
       if (allConfigs.length === 0) {
         logger.debug('No hay configuraciones de automatización activas');
         return;
@@ -227,7 +227,7 @@ class AutomationManager {
       throw error;
     } finally {
       this.stats.lastCycleDuration = Date.now() - cycleStartTime;
-      
+
       if (this.stats.lastCycleDuration > 5000) { // Más de 5 segundos
         logger.warn('Ciclo de automatización lento', {
           duration: this.stats.lastCycleDuration + 'ms'
@@ -273,20 +273,26 @@ class AutomationManager {
    * Evalúa automatizaciones por potencia
    */
   async evaluatePowerAutomations(powerConfigs) {
-   
+
     try {
       logger.debug('Evaluando automatizaciones por potencia', {
         count: powerConfigs.length
       });
 
+      //console.log('Evaluando automatizaciones por potencia', { count: powerConfigs.length });
+
       // Evaluar todas las configuraciones de potencia de una vez
       const evaluations = await this.powerEvaluator.evaluateMultiple(powerConfigs);
-      
+
+      //console.log('Evaluación múltiple de power completada', { evaluations });
+
       this.stats.powerEvaluations += evaluations.length;
 
       for (const evaluation of evaluations) {
+        //console.log('Procesando resultado de evaluación de power', { evaluation });
         try {
           if (evaluation.evaluation !== null && !evaluation.error) {
+            //console.log('Procesando resultado de  dins el if evaluación de power', { evaluation, evaluationType: 'power' });
             await this.processEvaluationResult(evaluation, evaluation.evaluation, 'power');
           }
 
@@ -309,14 +315,17 @@ class AutomationManager {
    * Procesa el resultado de una evaluación y ejecuta la acción si es necesaria
    */
   async processEvaluationResult(configData, shouldBeOn, evaluationType) {
-   
+    //console.log(' estem dins la funcio Procesando resultado de evaluación', { configData, shouldBeOn, evaluationType });
     try {
+      //console.log('Procesando resultado de evaluación dins de try');
       const deviceId = configData.deviceId;
       const deviceName = configData.deviceName;
-      
+
       // Obtener estado actual del dispositivo
       const currentState = this.memoryCache.getDeviceState(deviceId);
       const currentOutput = currentState ? currentState.output : null;
+
+      // console.log('Estado actual del dispositivo obtenido del cache', { deviceId, deviceName, evaluationType, shouldBeOn, currentState, currentOutput });
 
       logger.debug('Procesando resultado de evaluación', {
         deviceId,
@@ -327,15 +336,16 @@ class AutomationManager {
         needsAction: currentOutput !== shouldBeOn
       });
 
+
+
       // Solo actuar si hay cambio necesario
       if (currentOutput !== shouldBeOn) {
         const success = await this.executePlugAction(deviceId, shouldBeOn, deviceName, evaluationType);
-        
+
         if (success) {
-          // Actualizar estado en cache
-          this.memoryCache.updateDeviceState(deviceId, shouldBeOn);
+          // this.memoryCache.updateDeviceState(deviceId, shouldBeOn);
           this.stats.actionsExecuted++;
-          
+
           logger.info('Acción de automatización ejecutada', {
             deviceId,
             deviceName,
@@ -343,6 +353,14 @@ class AutomationManager {
             action: shouldBeOn ? 'ON' : 'OFF',
             previousState: currentOutput
           });
+          /*console.log('Acción de automatización ejecutada', {
+            deviceId,
+            deviceName,
+            evaluationType,
+            action: shouldBeOn ? 'ON' : 'OFF',
+            previousState: currentOutput
+          });
+          */
         }
       } else {
         logger.debug('No se requiere acción, dispositivo ya en estado correcto', {
@@ -385,10 +403,10 @@ class AutomationManager {
 
       // Verificar que tenemos el userId del dispositivo
       if (!deviceConfig.userId) {
-        logger.error('UserId no encontrado en configuración del dispositivo', { 
-          deviceId, 
+        logger.error('UserId no encontrado en configuración del dispositivo', {
+          deviceId,
           deviceName,
-          deviceConfig 
+          deviceConfig
         });
         return false;
       }
@@ -433,12 +451,12 @@ class AutomationManager {
    * Registra el handler MQTT para eventos de potencia en tiempo real
    */
   registerMqttHandler() {
-    
+
     try {
       if (!this.mqttService || this.mqttHandlerRegistered) {
         return;
       }
-      
+
       const mqttHandler = (messageData) => {
         try {
           this.handleMqttPowerEvent(messageData);
@@ -461,15 +479,15 @@ class AutomationManager {
    * Maneja eventos MQTT de potencia y estado en tiempo real
    */
   handleMqttPowerEvent(messageData) {
-   
+
     try {
       const { topic, payload } = messageData;
-      
+
       // Verificar si es un evento de potencia o estado relevante
       if (!this.isPowerOrStateRelatedTopic(topic)) {
         return;
       }
-     
+
       // Manejar eventos de estado de switch
       if (this.isSwitchStateTopic(topic)) {
         this.updateDeviceStateFromMqtt(topic, payload);
@@ -558,8 +576,8 @@ class AutomationManager {
 
       // recargar estado completo del dispositivo desde la base de datos
       this.memoryCache.reloadDeviceStates();
-     
-      
+
+
 
     } catch (error) {
       logger.error('Error actualizando estado de dispositivo desde MQTT:', {
@@ -628,10 +646,10 @@ class AutomationManager {
    * Fuerza la actualización de una configuración específica
    */
   async updateDeviceConfig(deviceId) {
-   
+
     try {
       await this.memoryCache.updateAutomationConfig(deviceId);
-      
+
       logger.info('Configuración de dispositivo actualizada', { deviceId });
 
       // Evaluar inmediatamente si hay configuración activa
@@ -657,7 +675,7 @@ class AutomationManager {
    */
   getStats() {
     const uptime = this.stats.startTime ? Date.now() - this.stats.startTime.getTime() : 0;
-    
+
     return {
       ...this.stats,
       isRunning: this.isRunning,
