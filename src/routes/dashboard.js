@@ -1,11 +1,13 @@
 const express = require('express');
 const { param, query, validationResult } = require('express-validator');
 const DashboardService = require('../services/dashboardService');
+const PowerDifferenceService = require('../services/powerDifferenceService');
 const { authenticateToken, requireEmailValidation } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 const dashboardService = new DashboardService();
+const powerDifferenceService = new PowerDifferenceService();
 
 // Middleware para manejar errores de validación
 const handleValidationErrors = (req, res, next) => {
@@ -575,6 +577,56 @@ router.get('/health',
         status: 'unhealthy',
         error: 'Health check falló',
         details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+        timestamp: new Date().toISOString()
+      });
+    }
+  })
+);
+
+/**
+ * @swagger
+ * /api/power/difference:
+ *   get:
+ *     summary: Obtener la diferencia actual (generació - consum) sense agregació
+ *     tags: [Power]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Diferencia de potencia actual
+ *       401:
+ *         description: No autorizado
+ *       500:
+ *         description: Error interno
+ */
+router.get('/power/difference',
+  authenticateToken,
+  asyncHandler(async (req, res) => {
+    try {
+      const userId = req.user.userId;
+      const results = await powerDifferenceService.getPowerDifference([userId]);
+      const userResult = results[userId];
+
+      if (!userResult) {
+        return res.json({
+          difference: 0,
+          assignedGeneration: 0,
+          totalConsumption: 0,
+          status: 'nodata'
+        });
+      }
+
+      res.json({
+        difference: userResult.difference,
+        assignedGeneration: userResult.assignedGeneration,
+        totalConsumption: userResult.totalConsumption,
+        status: userResult.difference > 0 ? 'surplus' : (userResult.difference < 0 ? 'from_grid' : 'balanced')
+      });
+    } catch (error) {
+      logger.error('Error obteniendo diferencia de potencia:', error);
+      res.status(500).json({
+        error: 'Error obteniendo diferencia de potencia',
+        details: error.message,
         timestamp: new Date().toISOString()
       });
     }

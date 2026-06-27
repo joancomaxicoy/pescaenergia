@@ -191,7 +191,58 @@ class AutomationManager {
 
     try {
       logger.debug('Iniciando ciclo de automatización');
+      /*
+      //// AFAGIT PER DEPURAR AL 21/6/26 JOAN COMA//
+      // ========== DEBUG EN TEMPS REAL ==========
+      console.log('\n🔄 CICLE AUTOMATITZACIÓ -', new Date().toLocaleTimeString());
+
+      // Mostrar configuracions actives
+      const allConfigs = this.memoryCache.getAllAutomationConfigs();
+      console.log(`Configuracions actives: ${allConfigs.length}`);
+
+      if (allConfigs.length > 0) {
+        // Mostrar mètriques de potència en temps real
+        console.log('\n⚡ POTÈNCIA EN TEMPS REAL:');
+        const metrics = this.memoryCache.getAllPowerMetrics();
+
+        // Separar generadors i dispositius
+        const generators = metrics.filter(m => m.type === 'generator');
+        const devices = metrics.filter(m => m.type === 'device' && m.power > 0);
+
+        if (generators.length > 0) {
+          console.log('  GENERADORS:');
+          generators.forEach(g => {
+            console.log(`    ⚡ ${g.generatorName || g.deviceId}: ${g.power}W`);
+          });
+        }
+
+        if (devices.length > 0) {
+          console.log('  DISPOSITIUS AMB CONSUM:');
+          devices.forEach(d => {
+            console.log(`    🔌 ${d.deviceName || d.deviceId}: ${d.power}W`);
+          });
+        }
+
+        // Balanç ràpid
+        const balance = this.memoryCache.calculatePowerDifference();
+        console.log(`\n  BALANÇ: Gen: ${balance.totalGeneration}W | Con: ${balance.totalConsumption}W | Dif: ${balance.difference}W`);
+
+        // Estats dels dispositius amb automatització
+        console.log('\n📱 ESTATS DISPOSITIUS AUTOMATITZATS:');
+        allConfigs.forEach(config => {
+          const state = this.memoryCache.getDeviceState(config.deviceId);
+          const status = state ? (state.output ? '🟢 ON' : '🔴 OFF') : '❓ DESCONEGUT';
+          console.log(`  ${status} ${config.deviceName} (${config.config.type})`);
+        });
+      }
+
+      console.log('─'.repeat(50));
+      // ========== FI DEBUG ==========
+      //// final AFAGIT PER DEPURAR AL 21/6/26 JOAN COMA//
+      */
+
       // Obtener todas las configuraciones activas
+      // MARCAT PER DEPURACIO DINAVA ERRORS 21/6/26 JOAN COMA si es borra el debug s'ha de descomentar la linia de sota.
       const allConfigs = this.memoryCache.getAllAutomationConfigs();
 
 

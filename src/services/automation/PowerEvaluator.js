@@ -82,11 +82,11 @@ class PowerEvaluator {
    * @returns {boolean|null} - true si debe estar ON, false si debe estar OFF, null si no hay cambio
    */
   evaluate(config, currentPowerData, currentDeviceState = false) {
-    console.log('Evaluando configuración de power', { config, currentPowerData, currentDeviceState });
+    
     try {
       // Obtener umbrales de potencia configurados (en kW)
-      const powerOnThreshold = parseFloat(config.config.powerOnThreshold || config.config.power) || 0;
-      const powerOffThreshold = parseFloat(config.config.powerOffThreshold) || (powerOnThreshold * 0.4); // Default: 40% del umbral ON
+      const powerOnThreshold = (config.config.powerOnThreshold ?? config.config.power) ?? 0;
+      const powerOffThreshold = config.config.powerOffThreshold ?? (powerOnThreshold > 0 ? powerOnThreshold * 0.4 : -0.25); // Default: 40% del umbral ON
 
       // Diferencia de potencia actual (generación - consumo) en Watts
       const differenceKW = currentPowerData[config.userId]?.difference || 0;
@@ -95,9 +95,10 @@ class PowerEvaluator {
       // Convertir umbrales a Watts para comparación
       const onThresholdW = powerOnThreshold * 1000;
       const offThresholdW = powerOffThreshold * 1000;
-
+      //A LES VALIDECIONS DE UMBRAL EM TRET EL <= PER MANTENIR EL 0 COM A POSSIBILITAT DE APAGAR AMB QUALSEVOL EXCEDENT, PERO SI QUE EL UMBRAL DE ENCENDIDO HA DE SER MAJOR QUE EL D'APAGAT
+      //
       // Validación de umbrales
-      if (powerOnThreshold <= 0) {
+      if (powerOnThreshold <= -1) {
         logger.warn('Umbral de encendido inválido', { powerOnThreshold });
         return null;
       }
@@ -149,7 +150,8 @@ class PowerEvaluator {
           decision: shouldBeOn ? 'ENCENDER' : 'MANTENER OFF'
         });
       }
-      console.log('Resultado de evaluación de power', { deviceId: config.deviceId, deviceName: config.deviceName, shouldBeOn, shouldBeOff });
+
+      //console.log('Resultado de evaluación de power', { deviceId: config.deviceId, deviceName: config.deviceName, shouldBeOn, shouldBeOff });
       return shouldBeOn;
 
     } catch (error) {
@@ -198,8 +200,8 @@ class PowerEvaluator {
             config: configData.config,
             evaluation: evaluation,
             currentState: currentDeviceState,
-            powerOnThreshold: parseFloat(configData.config.powerOnThreshold || configData.config.power) || 0,
-            powerOffThreshold: parseFloat(configData.config.powerOffThreshold) || 0
+            powerOnThreshold: (configData.config.powerOnThreshold ?? configData.config.power) ?? 0,
+            powerOffThreshold: configData.config.powerOffThreshold ?? 0
           });
 
         } catch (configError) {
@@ -226,7 +228,7 @@ class PowerEvaluator {
         offDevices: results.filter(r => r.evaluation === false).length,
         errors: results.filter(r => r.error).length
       });
-      // console.log('Evaluación múltiple de power completada', { results }); 
+      
       return results;
 
     } catch (error) {

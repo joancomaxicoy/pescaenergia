@@ -13,8 +13,8 @@ class MemoryCache {
     this.deviceStates = new Map();      // device_id -> { output: boolean, lastUpdate: timestamp }
     this.powerMetrics = new Map();      // device_id/generator_id -> { power: number, lastUpdate: timestamp, type: 'device'|'generator' }
     this.generatorConfigs = new Map();  // generator_id -> { name, topic, active }
-
-    this.reloadInterval = 5 * 60 * 1000; // 5 minutos
+    //// modificar per depurar hem cambiat de 5 minuts a 1 minut per veure si es recarrega correctament
+    this.reloadInterval = 1 * 60 * 1000; // 1 minuto
     this.reloadTimer = null;
     this.lastReload = null;
     this.isInitialized = false; // Flag para saber si ya se inicializó
@@ -22,7 +22,7 @@ class MemoryCache {
     // Timeouts para debouncing
     this.reloadAutomationConfigsTimeout = null;
     this.reloadDeviceStatesTimeout = null;
-    
+
     this.stats = {
       configsLoaded: 0,
       statesLoaded: 0,
@@ -31,6 +31,69 @@ class MemoryCache {
       reloadCount: 0,
       lastError: null
     };
+    /*** DESCCOMENTAT PER DEPURAR AL 23/6/26 JOAN COMA 
+    // AFAGIT PER DEPURAR AL 23/6/26 JOAN COMA//
+    // DEBUG: Mostrar cada 5 segons
+    setInterval(() => {
+      if (this.isInitialized) {
+        console.log('\n╔════════════════════════════════════════════════╗');
+        console.log('║        MEMORY CACHE - CONTINGUT COMPLET        ║');
+        console.log('╚════════════════════════════════════════════════╝');
+        console.log('🕐', new Date().toLocaleTimeString());
+
+        // 1. CONFIGURACIONS
+        console.log('\n📋 CONFIGURACIONS AUTOMATITZACIÓ (1):');
+        this.automationConfigs.forEach((config, id) => {
+          console.log(`  Dispositiu: ${config.deviceName}`);
+          console.log(`  ID: ${id}`);
+          console.log(`  Tipus: ${config.config.type}`);
+          console.log(`  Config completa:`, JSON.stringify(config.config, null, 2));
+          console.log(`  UserID: ${config.userId}`);
+          console.log(`  Shelly: ${config.shellyDeviceId}`);
+        });
+
+        // 2. ESTATS
+        console.log('\n🔌 ESTATS DELS PLUGS (15):');
+        this.deviceStates.forEach((state, id) => {
+          const icon = state.output ? '🟢 ON' : '🔴 OFF';
+          console.log(`  ${icon} ${state.deviceName}`);
+          console.log(`    ID: ${id} | Shelly: ${state.shellyDeviceId}`);
+        });
+
+        // 3. MÈTRIQUES DE POTÈNCIA
+        console.log('\n⚡ MÈTRIQUES DE POTÈNCIA (45):');
+
+        // Generadors
+        const generators = [];
+        const devices = [];
+        this.powerMetrics.forEach((metric, key) => {
+          if (metric.type === 'generator') generators.push({ key, ...metric });
+          else devices.push({ key, ...metric });
+        });
+
+        console.log('  ☀️  GENERADORS:');
+        generators.forEach(g => {
+          console.log(`    ${g.generatorName}: ${g.power}W (${g.key})`);
+        });
+
+        console.log('  🔌 DISPOSITIUS:');
+        devices.forEach(d => {
+          console.log(`    ${d.deviceName || d.key}: ${d.power}W (${d.deviceType})`);
+        });
+
+        // 4. GENERADORS
+        console.log('\n☀️  CONFIGURACIÓ GENERADORS (3):');
+        this.generatorConfigs.forEach((gen, id) => {
+          console.log(`  ${gen.name} (${id})`);
+          console.log(`    Topic: ${gen.topic}`);
+          console.log(`    Actiu: ${gen.active}`);
+        });
+
+        console.log('╚════════════════════════════════════════════════╝\n');
+      }
+    }, 10000); // Cada 10 segons
+    // FI DEL AFEGIT PER DEPURAR AL 23/6/26 JOAN COMA//
+    FI DE DESCCOMENTAT PER DEPURAR AL 23/6/26 JOAN COMA ***/
   }
 
   /**
@@ -39,13 +102,29 @@ class MemoryCache {
   async initialize() {
     try {
       logger.info('Inicializando MemoryCache para automatizaciones...');
-      
+
       await this.reloadAll();
       this.startAutoReload();
-      
+
       // Marcar como inicializado
       this.isInitialized = true;
-      
+      /*
+     ////AFAGIT PER DEPURAR AL 21/6/26 JOAN COMA//
+     // AFEGEIX AIXÒ PER DEBUG
+     console.log('\n========== MEMORY CACHE INICIALITZAT ==========');
+     console.log('Configuracions actives:', this.automationConfigs.size);
+     this.automationConfigs.forEach((config, id) => {
+       console.log(`  - ${id}: ${config.deviceName} (${config.config.type})`);
+     });
+     console.log('Estats dispositius:', this.deviceStates.size);
+     this.deviceStates.forEach((state, id) => {
+       console.log(`  - ${id}: ${state.deviceName} = ${state.output ? 'ON' : 'OFF'}`);
+     });
+     console.log('Mètriques potència:', this.powerMetrics.size);
+     console.log('Generadors:', this.generatorConfigs.size);
+     console.log('================================================\n');
+     */
+
       logger.info('MemoryCache inicializado exitosamente', {
         configs: this.automationConfigs.size,
         states: this.deviceStates.size,
@@ -54,7 +133,7 @@ class MemoryCache {
         reloadInterval: this.reloadInterval / 1000 + 's',
         isInitialized: this.isInitialized
       });
-      
+
     } catch (error) {
       logger.error('Error inicializando MemoryCache:', error);
       throw error;
@@ -67,17 +146,17 @@ class MemoryCache {
   async reloadAll() {
     try {
       logger.debug('Recargando cache completo...');
-      
+
       await Promise.all([
         this.reloadAutomationConfigs(),
         this.reloadDeviceStates(),
         this.reloadGeneratorConfigs(),
         this.reloadPowerMetrics()
       ]);
-      
+
       this.lastReload = new Date();
       this.stats.reloadCount++;
-      
+
       logger.debug('Cache recargado exitosamente', {
         configs: this.automationConfigs.size,
         states: this.deviceStates.size,
@@ -85,7 +164,7 @@ class MemoryCache {
         generators: this.generatorConfigs.size,
         timestamp: this.lastReload
       });
-      
+
     } catch (error) {
       this.stats.lastError = {
         message: error.message,
@@ -248,10 +327,10 @@ class MemoryCache {
     try {
       // Cargar generadores activos desde el YAML
       const generators = configLoader.getActiveGenerators();
-      
+
       // Limpiar configuraciones anteriores
       this.generatorConfigs.clear();
-      
+
       // Cargar nuevas configuraciones
       for (const generator of generators) {
         this.generatorConfigs.set(generator.id, {
@@ -261,14 +340,14 @@ class MemoryCache {
           active: generator.active
         });
       }
-      
+
       this.stats.generatorsLoaded = generators.length;
-      
+
       logger.debug('Configuraciones de generadores recargadas', {
         count: generators.length,
         generators: generators.map(g => ({ id: g.id, name: g.name, topic: g.topic }))
       });
-      
+
     } catch (error) {
       logger.error('Error recargando configuraciones de generadores:', error);
       // No lanzar error para no interrumpir la carga del cache
@@ -296,20 +375,20 @@ class MemoryCache {
       `;
 
       const powerResult = await database.query(powerQuery);
-      
+
       // Limpiar métricas anteriores
       this.powerMetrics.clear();
-      
+
       // Cargar nuevas métricas
       for (const row of powerResult.rows) {
         const deviceId = row.device_id;
         const isGenerator = deviceId.startsWith('gen-');
-        
+
         if (isGenerator) {
           // Es un generador
           const generatorId = deviceId.replace('gen-', '');
           const generatorConfig = this.generatorConfigs.get(generatorId);
-          
+
           this.powerMetrics.set(deviceId, {
             power: parseFloat(row.power) || 0,
             lastUpdate: row.timestamp,
@@ -328,13 +407,13 @@ class MemoryCache {
               WHERE id = $1
             `;
             const deviceInfoResult = await database.query(deviceInfoQuery, [deviceId]);
-            
+
             let deviceInfo = {
               deviceName: `Device ${deviceId}`,
               deviceType: 'UNKNOWN',
               shellyDeviceId: null
             };
-            
+
             if (deviceInfoResult.rows.length > 0) {
               const device = deviceInfoResult.rows[0];
               deviceInfo = {
@@ -343,7 +422,7 @@ class MemoryCache {
                 shellyDeviceId: device.shelly_device_id
               };
             }
-            
+
             this.powerMetrics.set(deviceId, {
               power: parseFloat(row.power) || 0,
               lastUpdate: row.timestamp,
@@ -358,7 +437,7 @@ class MemoryCache {
               deviceId,
               error: deviceError.message
             });
-            
+
             // Crear entrada básica sin información del dispositivo
             this.powerMetrics.set(deviceId, {
               power: parseFloat(row.power) || 0,
@@ -372,16 +451,16 @@ class MemoryCache {
           }
         }
       }
-      
+
       this.stats.powerMetricsLoaded = powerResult.rows.length;
-      
+
       // Calcular estadísticas por tipo
       const typeStats = {};
       for (const metric of this.powerMetrics.values()) {
         const key = metric.type === 'generator' ? 'generators' : metric.deviceType || 'unknown';
         typeStats[key] = (typeStats[key] || 0) + 1;
       }
-      
+
       logger.debug('Métricas de potencia recargadas', {
         total: powerResult.rows.length,
         typeStats,
@@ -389,7 +468,7 @@ class MemoryCache {
           .filter(m => m.type === 'generator')
           .map(m => ({ id: m.generatorId, name: m.generatorName, power: m.power }))
       });
-      
+
     } catch (error) {
       logger.error('Error recargando métricas de potencia:', error);
       throw error;
@@ -403,7 +482,7 @@ class MemoryCache {
     if (this.reloadTimer) {
       clearInterval(this.reloadTimer);
     }
-    
+
     this.reloadTimer = setInterval(async () => {
       try {
         await this.reloadAll();
@@ -411,7 +490,7 @@ class MemoryCache {
         logger.error('Error en recarga automática del cache:', error);
       }
     }, this.reloadInterval);
-    
+
     logger.debug('Recarga automática del cache iniciada', {
       intervalMinutes: this.reloadInterval / 60000
     });
@@ -472,7 +551,7 @@ class MemoryCache {
     if (existing) {
       existing.output = output === 'true' || output === true;
       existing.lastUpdated = timestamp;
-      
+
       logger.debug('Estado de dispositivo actualizado en cache', {
         deviceId,
         deviceName: existing.deviceName,
@@ -508,7 +587,7 @@ class MemoryCache {
       `;
 
       const result = await database.query(query, [deviceId]);
-      
+
       if (result.rows.length > 0) {
         const row = result.rows[0];
         this.automationConfigs.set(deviceId, {
@@ -520,7 +599,7 @@ class MemoryCache {
           config: row.config_data,
           updatedAt: row.updated_at
         });
-        
+
         logger.debug('Configuración de automatización actualizada en cache', {
           deviceId,
           deviceName: row.device_name,
@@ -529,12 +608,12 @@ class MemoryCache {
       } else {
         // Si no hay configuración activa, remover del cache
         this.automationConfigs.delete(deviceId);
-        
+
         logger.debug('Configuración de automatización removida del cache', {
           deviceId
         });
       }
-      
+
     } catch (error) {
       logger.error('Error actualizando configuración en cache:', {
         deviceId,
@@ -552,7 +631,7 @@ class MemoryCache {
       lastUpdate: timestamp,
       type: 'device'
     });
-    
+
     logger.debug('Métrica de potencia actualizada', {
       deviceId,
       power,
@@ -565,7 +644,7 @@ class MemoryCache {
    */
   updateGeneratorPowerMetric(generatorId, power, timestamp = new Date()) {
     const generatorConfig = this.generatorConfigs.get(generatorId);
-    
+
     if (generatorConfig) {
       this.powerMetrics.set(`gen-${generatorId}`, {
         power: parseFloat(power) || 0,
@@ -575,7 +654,7 @@ class MemoryCache {
         generatorName: generatorConfig.name,
         topic: generatorConfig.topic
       });
-      
+
       logger.debug('Métrica de potencia de generador actualizada', {
         generatorId,
         generatorName: generatorConfig.name,
@@ -598,7 +677,7 @@ class MemoryCache {
         return;
       }
     }
-    
+
     logger.debug('Topic no encontrado en configuración de generadores', { topic });
   }
 
@@ -683,7 +762,7 @@ class MemoryCache {
     }
 
     const difference = totalGeneration - totalConsumption;
-    
+
     logger.debug('Diferencia de potencia calculada (mejorada)', {
       totalGeneration,
       totalConsumption,
@@ -725,12 +804,12 @@ class MemoryCache {
    */
   getConfigTypeStats() {
     const stats = { schedule: 0, power: 0, manual: 0 };
-    
+
     for (const config of this.automationConfigs.values()) {
       const type = config.config.type || 'manual';
       stats[type] = (stats[type] || 0) + 1;
     }
-    
+
     return stats;
   }
 
@@ -761,7 +840,7 @@ class MemoryCache {
     this.deviceStates.clear();
     this.powerMetrics.clear();
     this.generatorConfigs.clear();
-    
+
     logger.debug('Cache limpiado');
   }
 

@@ -33,6 +33,10 @@ class PlugCard extends HTMLElement {
         this.isVisible = false;
         this.visibilityDebounceTimeout = null;
 
+        // Excedent actual
+        this.difference = 0;
+        this.differenceInterval = null;
+
         // SSE para tiempo real
         this.isSSEActive = false;
         this.lastSSEMessage = null;
@@ -62,6 +66,9 @@ class PlugCard extends HTMLElement {
 
         // Cargar configuración de automatización desde el servidor
         this.loadAutomationConfig();
+
+        // Començar a obtenir l'excedent actual
+        this.startDifferencePolling();
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
@@ -83,6 +90,12 @@ class PlugCard extends HTMLElement {
             console.log(`🔌 Desconectando SSE para plug ${this.plugData?.device_name || 'unknown'}`);
             this.sseManager.disconnect();
             this.sseManager = null;
+        }
+
+        // Aturar polling de l'excedent
+        if (this.differenceInterval) {
+            clearInterval(this.differenceInterval);
+            this.differenceInterval = null;
         }
 
         // Limpiar otros recursos
@@ -528,6 +541,7 @@ class PlugCard extends HTMLElement {
                                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
                                         <span style="flex: 1;">Encendre quan l'excedent sigui superior a:</span>
                                         <select id="power-on-threshold" style="padding: 4px 8px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 13px; min-width: 80px;">
+                                            <option value="0.0">0.0 kW</option>
                                             <option value="0.5">0.5 kW</option>    
                                             <option value="1">1 kW</option>
                                             <option value="2">2 kW</option>
@@ -563,6 +577,10 @@ class PlugCard extends HTMLElement {
                                             <option value="4">4 kW</option>
                                             <option value="5">5 kW</option>
                                         </select>
+                                    </div>
+                                    <!-- Excedent actual -->
+                                    <div id="current-difference" style="margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 13px; font-weight: 600; text-align: center; display: none;">
+                                        Carregant excedent...
                                     </div>
                                     <!-- Mensaje de ayuda -->
                                     <div style="margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 11px; color: #666;">
@@ -1387,12 +1405,12 @@ class PlugCard extends HTMLElement {
         this.automationMode = automation.type || 'manual';
 
         // Aplicar umbrales de potencia con valores por defecto
-        this.powerOnThreshold = parseFloat(automation.powerOnThreshold || automation.power) || 5;
-        this.powerOffThreshold = parseFloat(automation.powerOffThreshold) || (this.powerOnThreshold * 0.4);
+        this.powerOnThreshold = (automation.powerOnThreshold ?? automation.power) ?? 5;
+        this.powerOffThreshold = automation.powerOffThreshold ?? (this.powerOnThreshold > 0 ? this.powerOnThreshold * 0.4 : -0.25);
 
         // Asegurar que powerOffThreshold sea menor que powerOnThreshold
         if (this.powerOffThreshold >= this.powerOnThreshold) {
-            this.powerOffThreshold = this.powerOnThreshold * 0.4;
+            this.powerOffThreshold = this.powerOnThreshold > 0 ? this.powerOnThreshold * 0.4 : -0.25;
             console.warn('powerOffThreshold ajustado para ser menor que powerOnThreshold');
         }
 
@@ -1661,7 +1679,10 @@ class PlugCard extends HTMLElement {
                 if (manualModeInfo) manualModeInfo.style.display = 'block';
                 break;
             case 1: // Per potència
-                if (powerAutomationTable) powerAutomationTable.style.display = 'block';
+                if (powerAutomationTable) {
+                    powerAutomationTable.style.display = 'block';
+                    this.updateDifferenceDisplay();
+                }
                 break;
             case 2: // Per horari
                 if (timeAutomationTable) timeAutomationTable.style.display = 'block';
@@ -1671,6 +1692,58 @@ class PlugCard extends HTMLElement {
                 }
                 break;
         }
+    }
+
+    /**
+     * Obté l'excedent actual (generació - consum)
+     */
+    async fetchDifference() {
+        try {
+            if (!window.apiClient) return;
+            const res = await window.apiClient.get('/api/dashboard/power/difference');
+            const data = res.data;
+            if (data?.difference !== undefined) {
+                this.difference = data.difference * 1000;
+                this.updateDifferenceDisplay();
+            }
+        } catch (error) {
+            console.warn('Error obtenint excedent:', error.message);
+        }
+    }
+
+    /**
+     * Inicia el polling periòdic de l'excedent
+     */
+    startDifferencePolling() {
+        this.fetchDifference();
+        this.differenceInterval = setInterval(() => this.fetchDifference(), 10000);
+    }
+
+    /**
+     * Mostra l'excedent actual al selector d'umbral
+     */
+    updateDifferenceDisplay() {
+        const diffEl = this.querySelector('#current-difference');
+        if (!diffEl) return;
+
+        const diffKW = this.difference / 1000;
+        const absKW = Math.abs(diffKW);
+        const isSurplus = this.difference > 0;
+
+        if (isSurplus) {
+            diffEl.textContent = `Excedent actual: ${absKW.toFixed(3)} kW`;
+            diffEl.style.backgroundColor = '#d4edda';
+            diffEl.style.color = '#155724';
+        } else if (this.difference < 0) {
+            diffEl.textContent = `De la xarxa: ${absKW.toFixed(3)} kW`;
+            diffEl.style.backgroundColor = '#f8d7da';
+            diffEl.style.color = '#b20909';
+        } else {
+            diffEl.textContent = `Equilibrat: 0.000 kW`;
+            diffEl.style.backgroundColor = '#fff3cd';
+            diffEl.style.color = '#856404';
+        }
+        diffEl.style.display = 'block';
     }
 
     /**
