@@ -247,4 +247,129 @@ router.get('/plugs', authenticateSSE, async (req, res) => {
   }
 });
 
+// Endpoint per a streaming de dades de la piscina en temps real
+router.get('/pool', authenticateSSE, async (req, res) => {
+  logger.info('SSE Pool: usuari autenticat', { email: req.user.email });
+
+  try {
+    const PoolService = require('../services/poolService');
+    const poolService = new PoolService();
+
+    // Obtener dispositiu de piscina de l'usuari
+    const device = await poolService.findUserPoolDevice(req.user.userId);
+    if (!device) {
+      return res.status(404).send('No tens cap dispositiu de piscina assignat');
+    }
+
+    const poolDeviceId = device.shelly_device_id;
+    const mqttDataService = mqttServiceRegistry.getMqttDataService();
+    if (!mqttDataService || !mqttDataService.mqttService) {
+      logger.error('SSE Pool: Servei MQTT no disponible');
+      return res.status(503).send('Servei MQTT no disponible');
+    }
+
+    logger.info('SSE Pool: Dispositiu de piscina trobat', {
+      userId: req.user.userId,
+      poolDeviceId
+    });
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    res.write(`retry: 5000\n`);
+
+    const heartbeat = setInterval(() => {
+      res.write(`: ping\n\n`);
+    }, 15000);
+
+        // Extreure el CUPS del shelly_device_id per filtrar topics MQTT
+        const cups = poolDeviceId.split('/')[1] || '';
+
+        const mqttMessageHandler = (messageData) => {
+            try {
+                // Filtrar topics de la bomba depuradora
+                if (!messageData.topic.includes('BombaDepuradora')) {
+                    return;
+                }
+                if (!messageData.topic.includes(cups.trim())) {
+                    return;
+                }
+
+        const sseData = {
+          topic: messageData.topic,
+          payload: messageData.payload,
+          timestamp: messageData.timestamp,
+          receivedAt: messageData.receivedAt
+        };
+
+        res.write(`data: ${JSON.stringify(sseData)}\n\n`);
+
+        logger.debug('Missatge MQTT de piscina enviat via SSE', {
+          topic: messageData.topic,
+          userId: req.user.userId
+        });
+      } catch (error) {
+        logger.error('Error enviant missatge MQTT de piscina via SSE:', {
+          error: error.message,
+          topic: messageData.topic
+        });
+      }
+    };
+
+    mqttDataService.mqttService.addMessageHandler(mqttMessageHandler);
+
+    logger.info('SSE Pool: Handler MQTT filtrat registrat', {
+      userId: req.user.userId,
+      poolDeviceId,
+      cups
+    });
+
+    const cleanup = () => {
+      if (mqttDataService && mqttDataService.mqttService) {
+        mqttDataService.mqttService.removeMessageHandler(mqttMessageHandler);
+        logger.info('SSE Pool: Handler MQTT filtrat remogut', {
+          userId: req.user.userId
+        });
+      }
+      clearInterval(heartbeat);
+      res.end();
+    };
+
+    req.on('close', cleanup);
+    req.on('error', (error) => {
+      logger.error('SSE Pool: Error en request', {
+        error: error.message,
+        userId: req.user.userId
+      });
+      cleanup();
+    });
+
+    res.on('close', () => {
+      logger.info('SSE Pool: Connexió tancada', {
+        userId: req.user.userId
+      });
+    });
+
+    res.write(`data: ${JSON.stringify({
+      type: 'connection_established',
+      message: 'Connectat al stream de dades de la piscina',
+      timestamp: new Date().toISOString(),
+      userId: req.user.userId,
+      poolDeviceId
+    })}\n\n`);
+
+  } catch (error) {
+    logger.error('SSE Pool: Error inicialitzant endpoint', {
+      error: error.message,
+      userId: req.user.userId,
+      email: req.user.email
+    });
+    return res.status(500).send(`Error inicialitzant stream: ${error.message}`);
+  }
+});
+
 module.exports = router;

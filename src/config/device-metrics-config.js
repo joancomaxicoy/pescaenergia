@@ -48,6 +48,39 @@ const DEVICE_METRICS_CONFIG = {
     ]
   },
 
+  // Bomba depuradora de piscina
+  // Topics: shellies/BombaDepuradora/{cups}/...
+  SHELLY_BOMBADEPURADORA: {
+    deviceType: 'POOL',
+    description: 'Shelly - Bomba depuradora de piscina',
+    
+    timeSeriesMetrics: [
+      // Sense timeSeriesMetrics específiques per ara; 
+      // emeter_0_power es guarda com a estat perquè poolService el llegeixi
+    ],
+    
+    stateMetrics: [
+      'emeter_0_power',            // Potència actual (W) - vital per poolService
+      'relay_0'                    // Estat del relé (on/off)
+    ],
+    
+    ignoredMetrics: [
+      'emeter_0_reactive_power',
+      'emeter_0_voltage',
+      'emeter_0_total',
+      'emeter_0_total_returned',
+      'emeter_1_power',
+      'emeter_1_reactive_power',
+      'emeter_1_voltage',
+      'emeter_1_total',
+      'emeter_1_total_returned',
+      'emeter_0_energy',
+      'emeter_0_returned_energy',
+      'emeter_1_energy',
+      'emeter_1_returned_energy'
+    ]
+  },
+
   // Shelly Plus Plug S - Enchufe inteligente
   // Topics: {cualquier_prefijo}/{cups}/... (acs/xxx, pepe/xxx, etc.)
   PLUG: {
@@ -144,6 +177,11 @@ const DEVICE_METRICS_CONFIG = {
  * @returns {string} - 'SHELLY_EM', 'PLUG', 'GENERATOR', o 'UNKNOWN'
  */
 function getDeviceTypeFromTopic(topic) {
+  // Bomba depuradora: shellies/BombaDepuradora/...
+  if (topic.startsWith('shellies/BombaDepuradora/')) {
+    return 'SHELLY_BOMBADEPURADORA';
+  }
+
   // Shelly EM: shellies/shellyem/...
   if (topic.startsWith('shellies/shellyem/')) {
     return 'SHELLY_EM';

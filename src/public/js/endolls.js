@@ -20,6 +20,7 @@ class EndollsManager {
         this.cacheElements();
         this.setupEventListeners();
         this.loadUserPlugs();
+        this.loadPoolDevice();
         this.isInitialized = true;
 
         // Inicializar iconos
@@ -44,7 +45,9 @@ class EndollsManager {
             modalLoading: document.getElementById('modalLoading'),
             modalResults: document.getElementById('modalResults'),
             modalMessage: document.getElementById('modalMessage'),
-            modalPlugsList: document.getElementById('modalPlugsList')
+            modalPlugsList: document.getElementById('modalPlugsList'),
+            poolSection: document.getElementById('poolSection'),
+            poolContainer: document.getElementById('poolContainer')
         };
     }
 
@@ -129,36 +132,34 @@ class EndollsManager {
 
     /**
      * Renderiza la lista de endolls usando web components
+     * Només mostra plug-card per dispositius ACS (shelly_device_id que comenci per "acs/")
      */
     renderPlugs(plugs) {
-        if (!plugs || plugs.length === 0) {
+        const acsPlugs = (plugs || []).filter(p => p.shelly_device_id && p.shelly_device_id.startsWith('acs/'));
+
+        if (acsPlugs.length === 0) {
             this.showEmptyState();
-            this.disconnectSSE(); // Desconectar SSE si no hay plugs
+            this.disconnectSSE();
             return;
         }
 
         this.showPlugsList();
         
         if (this.elements.plugsContainer) {
-            // Limpiar el contenedor y el mapa de plug cards
             this.elements.plugsContainer.innerHTML = '';
             this.plugCards.clear();
             
-            // Crear un web component para cada plug
-            plugs.forEach(plug => {
+            acsPlugs.forEach(plug => {
                 const plugCard = document.createElement('plug-card');
                 plugCard.setAttribute('plug-data', JSON.stringify(plug));
                 
-                // Escuchar eventos del web component
                 plugCard.addEventListener('plug-toggled', this.handlePlugToggled.bind(this));
                 plugCard.addEventListener('plug-error', this.handlePlugError.bind(this));
                 
-                // Registrar el plug card en el mapa para distribución SSE
                 this.plugCards.set(plug.shelly_device_id, plugCard);
                 
                 this.elements.plugsContainer.appendChild(plugCard);
             });
-            
         }
     }
 
@@ -328,6 +329,34 @@ class EndollsManager {
             console.error('Error carregant endolls:', error);
             // No mostrar error aquí, solo en consola
         }
+    }
+
+    /**
+     * Carrega el dispositiu de piscina i el renderitza
+     */
+    async loadPoolDevice() {
+        try {
+            const { data } = await window.apiClient.get('/api/pool/device');
+            if (data && data.data) {
+                this.renderPoolCard(data.data);
+            }
+        } catch (error) {
+            console.warn('No s\'ha trobat dispositiu de piscina:', error.message);
+        }
+    }
+
+    /**
+     * Renderitza el web component de la piscina
+     */
+    renderPoolCard(poolDevice) {
+        if (!this.elements.poolContainer || !this.elements.poolSection) return;
+
+        this.elements.poolContainer.innerHTML = '';
+        const poolCard = document.createElement('pool-card');
+        poolCard.setAttribute('pool-data', JSON.stringify(poolDevice));
+        this.elements.poolContainer.appendChild(poolCard);
+        this.elements.poolSection.style.display = 'block';
+        window.uiUtils.initializeLucideIcons();
     }
 
     /**

@@ -220,7 +220,7 @@ class NormalizerService {
     } else if (topicParts.length >= 2) {
       // Topics específicos de dispositivo
       const shellyType = topicParts[0]; // shellyem, shellyplusplugs, etc.
-      deviceId = topicParts[1];
+      deviceId = topicParts[1].trim();
       deviceType = `SHELLY_${shellyType.toUpperCase()}`;
       
       if (topicParts.length === 2) {

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PoolCard Demo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Poppins', Arial, sans-serif;
+            background: #f0f2f5;
+            color: #1b4444;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            padding: 30px 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 { font-size: 28px; font-weight: 700; letter-spacing: -1px; }
+        .header p { color: #999; margin-top: 8px; font-size: 14px; }
+        .events-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .events-panel h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .events-panel #eventLog {
+            background: #1b4444;
+            color: #fcbd25;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+        .events-panel .event-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>&#x1F3CA; PoolCard Demo</h1>
+            <p>Component web per gestionar la depuradora de piscina amb control solar</p>
+        </div>
+
+        <pool-card id="poolCard" pool-data='{"deviceId":"DepuradoraPiscina/CUPS12345","deviceName":"Depuradora Piscina"}'></pool-card>
+
+        <div class="events-panel">
+            <h3>&#x1F4DD; Registre d'esdeveniments</h3>
+            <div id="eventLog">
+                <div class="event-entry">&#x1F3CA; PoolCard carregat. Mode inicial: Manual</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/sse-manager.js"></script>
+    <script src="js/api-client.js"></script>
+    <script src="js/components/pool-card.js"></script>
+    <script>
+        (function() {
+            const eventLog = document.getElementById('eventLog');
+            const poolCard = document.getElementById('poolCard');
+
+            function logEvent(msg) {
+                const entry = document.createElement('div');
+                entry.className = 'event-entry';
+                entry.textContent = `[${new Date().toLocaleTimeString('ca-ES')}] ${msg}`;
+                eventLog.appendChild(entry);
+                eventLog.scrollTop = eventLog.scrollHeight;
+            }
+
+            poolCard.addEventListener('pool-mode-changed', (e) => {
+                logEvent(`Mode canviat a: ${e.detail.mode}`);
+            });
+
+            logEvent('PoolCard component registrat i llest');
+            logEvent(`Mode actual: ${poolCard.mode}`);
+
+            // Simulate real-time data updates every 5 seconds
+            setInterval(() => {
+                const excedent = (Math.random() * 2.0).toFixed(2);
+                poolCard.solarExcedent = parseFloat(excedent);
+                poolCard.evaluateAutomation();
+                poolCard.updateUI();
+            }, 5000);
+        })();
+    </script>
+</body>
+</html>
