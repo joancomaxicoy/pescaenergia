@@ -1,9 +1,88 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const database = require('../utils/database');
 const logger = require('../utils/logger');
 
 const router = express.Router();
+
+const KNOWN_DEVICE_COLORS = {
+  total: '#1a1a2e',
+  acs: '#ff6b6b',
+  depuradora: '#4ecdc4',
+  bombaNet: '#45b7d1',
+  clorador: '#f9a825',
+  solar: '#ffd93d'
+};
+
+const DEVICE_NAME_MAP = {
+  depuradora: 'Depuradora',
+  bombaNet: 'Bomba Neteja',
+  clorador: 'Clorador Salí'
+};
+
+const COLOR_PALETTE = [
+  '#ab47bc', '#26a69a', '#ef5350', '#7e57c2',
+  '#8d6e63', '#78909c', '#5c6bc0', '#00acc1',
+  '#43a047', '#c0ca33', '#ff7043', '#ec407a',
+  '#1e88e5', '#d81b60', '#6d4c41', '#546e7a'
+];
+
+async function getUserDevices(userId) {
+  const deviceTagMap = {};
+  const seenTags = new Set();
+
+  const result = await database.query(
+    `SELECT id, shelly_device_id, device_name FROM devices WHERE user_id = $1`,
+    [userId]
+  );
+
+  for (const d of result.rows) {
+    const sid = d.shelly_device_id || '';
+    const parts = sid.split('/');
+    let tag;
+
+    if (parts.length === 1) {
+      tag = 'total';
+    } else {
+      const prefix = parts[0];
+      if (prefix === 'BombaDepuradora') tag = 'depuradora';
+      else if (prefix === 'BombaNet') tag = 'bombaNet';
+      else if (prefix === 'CloradorSali') tag = 'clorador';
+      else tag = prefix.toLowerCase();
+    }
+
+    deviceTagMap[d.id] = tag;
+    seenTags.add(tag);
+  }
+
+  const participationResult = await database.query(
+    'SELECT 1 FROM user_participation WHERE user_id = $1 LIMIT 1',
+    [userId]
+  );
+  if (participationResult.rows.length > 0) seenTags.add('solar');
+
+  let colorIdx = 0;
+  const userDevices = [];
+  const tagOrder = ['total', 'acs', 'depuradora', 'bombaNet', 'clorador'];
+
+  const sortedTags = Array.from(seenTags).sort((a, b) => {
+    const ai = tagOrder.indexOf(a);
+    const bi = tagOrder.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+  for (const tag of sortedTags) {
+    const color = KNOWN_DEVICE_COLORS[tag] || COLOR_PALETTE[colorIdx++ % COLOR_PALETTE.length];
+    let name;
+    if (tag === 'total') name = 'Total (Shelly EM)';
+    else if (tag === 'solar') name = 'Solar';
+    else name = DEVICE_NAME_MAP[tag] || tag.charAt(0).toUpperCase() + tag.slice(1);
+    userDevices.push({ tag, name, color });
+  }
+
+  return userDevices;
+}
 
 // Middleware para verificar autenticación desde cookies
 const checkAuthFromCookie = async (req, res, next) => {
@@ -170,6 +249,32 @@ router.get('/dashboard', checkAuthFromCookie, requireAuth, requireCups, (req, re
         isDashboard: true,
         user: req.user.userData,
         additionalScripts: ['/js/dashboard.js'],
+        helpers: {
+            formatDate: formatDate
+        }
+    });
+});
+
+/**
+ * Página de Estadístiques
+ */
+router.get('/estadistiques', checkAuthFromCookie, requireAuth, requireCups, async (req, res) => {
+    let userDevices = [];
+    try {
+        userDevices = await getUserDevices(req.user.userId);
+    } catch (err) {
+        logger.error('Error obtenint dispositius per estadístiques:', err);
+    }
+
+    res.render('pages/statistics', {
+        title: 'Estadistiques',
+        layout: 'main',
+        showNavbar: true,
+        showFooter: true,
+        isEstadistiques: true,
+        user: req.user.userData,
+        userDevices: userDevices,
+        additionalScripts: [],
         helpers: {
             formatDate: formatDate
         }

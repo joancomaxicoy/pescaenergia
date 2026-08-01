@@ -1,6 +1,6 @@
 const logger = require('../../utils/logger');
 const configLoader = require('../../utils/configLoader');
-const { getDeviceTypeFromTopic, classifyMetric } = require('../../config/device-metrics-config');
+const { getDeviceTypeFromTopic, classifyMetric, isTimeSeriesMetric, isStateMetric, isIgnoredMetric } = require('../../config/device-metrics-config');
 
 class NormalizerService {
   constructor() {
@@ -220,7 +220,10 @@ class NormalizerService {
     } else if (topicParts.length >= 2) {
       // Topics específicos de dispositivo
       const shellyType = topicParts[0]; // shellyem, shellyplusplugs, etc.
-      deviceId = topicParts[1].trim();
+      const poolTypes = ['BombaDepuradora', 'BombaNet', 'CloradorSali'];
+      deviceId = poolTypes.includes(shellyType)
+        ? `${shellyType}/${topicParts[1].trim()}`
+        : topicParts[1].trim();
       deviceType = `SHELLY_${shellyType.toUpperCase()}`;
       
       if (topicParts.length === 2) {
@@ -685,72 +688,32 @@ class NormalizerService {
     for (const metric of metrics) {
       const { name: metricName, value, unit } = metric;
       
-      // Clasificar la métrica según la configuración
-      const classification = classifyMetric(deviceType, metricName);
+      // Ignoradas → skip
+      if (isIgnoredMetric(deviceType, metricName)) {
+        ignoredMetrics.push(metricName);
+        continue;
+      }
       
-      switch (classification) {
-        case 'state':
-          stateMetrics.push({
-            metricName,
-            value,
-            unit,
-            deviceType
-          });
-          break;
-          
-        case 'timeseries':
-          // Solo agregar a series temporales si el valor es numérico
-          if (typeof value === 'number' && !isNaN(value)) {
-            timeSeriesMetrics.push({
-              metricName,
-              value,
-              unit,
-              deviceType
-            });
-          } else {
-            logger.debug('Valor no numérico omitido para serie temporal', { 
-              deviceId, 
-              metricName, 
-              value, 
-              type: typeof value 
-            });
-          }
-          break;
-          
-        case 'ignored':
-          ignoredMetrics.push(metricName);
-          break;
-          
-        case 'unknown':
-          // Para métricas desconocidas, decidir basándose en el tipo de valor
-          if (typeof value === 'number' && !isNaN(value)) {
-            timeSeriesMetrics.push({
-              metricName,
-              value,
-              unit,
-              deviceType
-            });
-            logger.debug('Métrica desconocida tratada como serie temporal', {
-              deviceId,
-              deviceType,
-              metricName,
-              value
-            });
-          } else {
-            stateMetrics.push({
-              metricName,
-              value,
-              unit,
-              deviceType
-            });
-            logger.debug('Métrica desconocida tratada como estado', {
-              deviceId,
-              deviceType,
-              metricName,
-              value
-            });
-          }
-          break;
+      const isTS = isTimeSeriesMetric(deviceType, metricName);
+      const isST = isStateMetric(deviceType, metricName);
+      
+      // Timeseries: añadir si es numérico
+      if (isTS && typeof value === 'number' && !isNaN(value)) {
+        timeSeriesMetrics.push({ metricName, value, unit, deviceType });
+      }
+      
+      // State: añadir siempre
+      if (isST) {
+        stateMetrics.push({ metricName, value, unit, deviceType });
+      }
+      
+      // Desconocidas
+      if (!isTS && !isST) {
+        if (typeof value === 'number' && !isNaN(value)) {
+          timeSeriesMetrics.push({ metricName, value, unit, deviceType });
+        } else {
+          stateMetrics.push({ metricName, value, unit, deviceType });
+        }
       }
     }
     

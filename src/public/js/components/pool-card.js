@@ -6,12 +6,11 @@ class PoolCard extends HTMLElement {
         this.isLoading = false;
 
         this.elements = {
-            bombaDepuradora: { isOn: false, power: 0, isOnline: true, hoursToday: 0, startTime: null },
-            bombaNeteja: { isOn: false, power: 0, isOnline: true, hoursToday: 0, startTime: null },
-            cloradorSali: { isOn: false, power: 0, isOnline: true, hoursToday: 0, startTime: null }
+            bombaDepuradora: { isOn: false, power: 0, isOnline: true, minutesToday: 0 },
+            bombaNeteja: { isOn: false, power: 0, isOnline: true, minutesToday: 0 },
+            cloradorSali: { isOn: false, power: 0, isOnline: true, minutesToday: 0 }
         };
 
-        this.loadFromCache();
         this.totalPower = 0;
         this.solarExcedent = 0;
         this.mode = 'manual';
@@ -28,16 +27,15 @@ class PoolCard extends HTMLElement {
         };
         this.lastUpdate = null;
 
-        this.sseManager = null;
-        this.pollInterval = null;
         this.statusCheckInterval = null;
         this.excedentInterval = null;
 
         this.handleToggle = this.handleToggle.bind(this);
-        this.handleSSEMessage = this.handleSSEMessage.bind(this);
         this.setMode = this.setMode.bind(this);
         this.saveAutomation = this.saveAutomation.bind(this);
         this.requestStatusUpdate = this.requestStatusUpdate.bind(this);
+        this.fetchPoolHours = this.fetchPoolHours.bind(this);
+        this.hoursInterval = null;
     }
 
     static get observedAttributes() {
@@ -45,24 +43,25 @@ class PoolCard extends HTMLElement {
     }
 
     connectedCallback() {
+        if (this._initialized) return;
+        this._initialized = true;
+
+        if (!this.poolData) {
+            const attr = this.getAttribute('pool-data');
+            if (attr) {
+                try { this.poolData = JSON.parse(attr); } catch { /* ignore */ }
+            }
+        }
+
         this.render();
         this.setupEventListeners();
-        this.fetchInitialStatus();
+        this.fetchInitialStatus(true);
         this.loadAutomationConfig();
-        this.initializeSSE();
+        this.fetchPoolHours();
         this.startPolling();
     }
 
     disconnectedCallback() {
-        this.saveToCache();
-        if (this.sseManager) {
-            this.sseManager.disconnect();
-            this.sseManager = null;
-        }
-        if (this.pollInterval) {
-            clearInterval(this.pollInterval);
-            this.pollInterval = null;
-        }
         if (this.statusCheckInterval) {
             clearInterval(this.statusCheckInterval);
             this.statusCheckInterval = null;
@@ -71,75 +70,39 @@ class PoolCard extends HTMLElement {
             clearInterval(this.excedentInterval);
             this.excedentInterval = null;
         }
-        if (this.timeInterval) {
-            clearInterval(this.timeInterval);
-            this.timeInterval = null;
+        if (this.hoursInterval) {
+            clearInterval(this.hoursInterval);
+            this.hoursInterval = null;
         }
+        this._initialized = false;
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
         if (name === 'pool-data' && newValue) {
             try {
                 this.poolData = JSON.parse(newValue);
-                if (this.isConnected) {
-                    this.render();
-                    this.setupEventListeners();
-                    this.fetchInitialStatus();
-                    this.loadAutomationConfig();
-                    this.initializeSSE();
-                }
             } catch (error) {
                 console.error('Error parsing pool data:', error);
             }
         }
     }
 
-    // ===== CACHE =====
-    loadFromCache() {
+    // ===== HOURS FROM SERVER =====
+    async fetchPoolHours() {
+        if (!this.poolData?.deviceId) return;
         try {
-            const cached = localStorage.getItem('poolHours');
-            if (cached) {
-                const data = JSON.parse(cached);
-                for (const [key, el] of Object.entries(this.elements)) {
-                    if (data[key]?.hoursToday !== undefined) {
-                        el.hoursToday = data[key].hoursToday;
-                    }
-                }
-                console.log('💾 hoursToday loaded from cache:', data);
-            }
-        } catch (e) {
-            // ignore
-        }
-    }
-
-    saveToCache() {
-        try {
-            const data = {};
+            const deviceId = encodeURIComponent(this.poolData.deviceId);
+            const { data } = await window.apiClient.get(`/api/pool/hours?deviceId=${deviceId}`);
+            const hoursData = data?.data || data;
+            if (!hoursData?.date) return;
             for (const [key, el] of Object.entries(this.elements)) {
-                data[key] = { hoursToday: el.hoursToday };
+                if (hoursData[key] !== undefined) {
+                    el.minutesToday = hoursData[key];
+                }
             }
-            localStorage.setItem('poolHours', JSON.stringify(data));
+            this.updateUI();
         } catch (e) {
-            // ignore
-        }
-    }
-
-    trackElementTiming(key) {
-        const el = this.elements[key];
-        if (!el) return;
-        if (el.isOn) {
-            if (!el.startTime) {
-                el.startTime = Date.now();
-                console.log(`⏱️ [${key}] timer started`);
-            }
-        } else {
-            if (el.startTime) {
-                const elapsed = (Date.now() - el.startTime) / 3600000;
-                el.hoursToday += elapsed;
-                console.log(`⏱️ [${key}] timer stopped: +${elapsed.toFixed(4)}h = ${el.hoursToday.toFixed(2)}h total`);
-                el.startTime = null;
-                this.saveToCache();
-            }
+            console.warn('No s\'han pogut carregar hores del servidor:', e.message);
         }
     }
 
@@ -764,7 +727,7 @@ class PoolCard extends HTMLElement {
                             <div class="stat-label">Consum total</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value positive" id="solarExcedent">0.00 kW</div>
+                            <div class="stat-value positive" id="solarExcedent">0 W</div>
                             <div class="stat-label">Excedent solar</div>
                         </div>
                         <div class="stat-item">
@@ -947,10 +910,9 @@ class PoolCard extends HTMLElement {
                         </div>
                         <div class="config-row">
                             <label>Excedent actual</label>
-                            <span style="font-weight:600; color:#459f49;" id="configExcedent">0.00 kW</span>
+                            <span style="font-weight:600; color:#459f49;" id="configExcedent">0 W</span>
                             <span class="hint">(actualització automàtica)</span>
                         </div>
-                        <!--
                         <div class="config-row config-test-row">
                             <label>Proves</label>
                             <button type="button" class="test-btn" data-excedent="2.0">+2 kW</button>
@@ -959,7 +921,6 @@ class PoolCard extends HTMLElement {
                             <button type="button" class="test-btn" data-excedent="-0.5">-0.5 kW</button>
                             <button type="button" class="test-btn" data-excedent="-1.0">-1 kW</button>
                         </div>
-                        -->
                     </div>
                 </div>
 
@@ -979,6 +940,7 @@ class PoolCard extends HTMLElement {
         card.querySelectorAll('.mode-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 this.setMode(btn.dataset.mode);
+                this.saveAutomation();
             });
         });
 
@@ -994,12 +956,24 @@ class PoolCard extends HTMLElement {
         card.querySelector('#btnRefresh').addEventListener('click', () => this.requestStatusUpdate());
         card.querySelector('#btnSaveConfig').addEventListener('click', () => this.saveAutomation());
         card.querySelectorAll('.test-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const value = parseFloat(btn.dataset.excedent);
-                this.solarExcedent = value;
+            btn.addEventListener('click', async () => {
+                const valueKW = parseFloat(btn.dataset.excedent);
+                this.solarExcedent = valueKW * 1000;
                 this.updateUI();
-                if (this.mode === 'automatic') this.evaluateAutomation();
-                this.showToast(`🧪 Excedent simulat: ${value >= 0 ? '+' : ''}${value} kW`);
+                if (this.mode === 'automatic') {
+                    try {
+                        await window.apiClient.post('/api/pool/test-automation', {
+                            deviceId: this.poolData?.deviceId,
+                            simulatedExcedentKW: valueKW
+                        });
+                        this.showToast(`✅ Test: excedent ${valueKW >= 0 ? '+' : ''}${valueKW} kW enviat al backend`);
+                    } catch (err) {
+                        console.warn('Error en test automation:', err);
+                        this.showToast(`⚠️ Error en backend: ${err.message}`);
+                    }
+                } else {
+                    this.showToast(`🧪 Excedent simulat (UI): ${valueKW >= 0 ? '+' : ''}${valueKW} kW`);
+                }
             });
         });
 
@@ -1010,22 +984,22 @@ class PoolCard extends HTMLElement {
     }
 
     // ===== FETCH INITIAL STATUS =====
-    async fetchInitialStatus() {
+    async fetchInitialStatus(showLoader = false) {
         if (!this.poolData?.deviceId) return;
-        this.showLoading(true);
+        if (showLoader) this.showLoading(true);
 
         try {
             const deviceId = encodeURIComponent(this.poolData.deviceId);
             const { data } = await window.apiClient.get(`/api/pool/status?deviceId=${deviceId}`);
+            const statusData = data?.data || data;
 
-            if (data) {
-                console.log('📡 fetchInitialStatus response:', JSON.stringify(data));
-                this.updateFromStatus(data);
+            if (statusData) {
+                this.updateFromStatus(statusData);
             }
         } catch (error) {
             console.warn('No s\'ha pogut obtenir l\'estat inicial, es pot simular:', error.message);
         } finally {
-            this.showLoading(false);
+            if (showLoader) this.showLoading(false);
         }
     }
 
@@ -1034,18 +1008,13 @@ class PoolCard extends HTMLElement {
             for (const [key, element] of Object.entries(data.elements)) {
                 if (this.elements[key]) {
                     const el = this.elements[key];
-                    const wasOn = el.isOn;
                     el.isOn = element.isOn;
                     el.power = element.power || 0;
                     el.isOnline = element.isOnline !== false;
-                    if (wasOn !== el.isOn) {
-                        this.trackElementTiming(key);
-                    }
                 }
             }
         }
         if (data.totalPower !== undefined) this.totalPower = data.totalPower;
-        if (data.solarExcedent !== undefined) this.solarExcedent = data.solarExcedent;
         if (data.lastUpdate) this.lastUpdate = data.lastUpdate;
 
         this.updateUI();
@@ -1058,16 +1027,17 @@ class PoolCard extends HTMLElement {
         try {
             const deviceId = encodeURIComponent(this.poolData.deviceId);
             const { data } = await window.apiClient.get(`/api/pool/automation?deviceId=${deviceId}`);
+            const configData = data?.data || data;
 
-            if (data) {
-                if (data.mode) this.mode = data.mode;
-                if (data.schedule) {
-                    Object.assign(this.schedule, data.schedule);
+            if (configData) {
+                if (configData.mode) this.mode = configData.mode;
+                if (configData.schedule) {
+                    Object.assign(this.schedule, configData.schedule);
                 }
-                if (data.automatic) {
-                    if (data.automatic.maxHours) Object.assign(this.automatic.maxHours, data.automatic.maxHours);
-                    if (data.automatic.thresholds) Object.assign(this.automatic.thresholds, data.automatic.thresholds);
-                    if (data.automatic.offThresholds) Object.assign(this.automatic.offThresholds, data.automatic.offThresholds);
+                if (configData.automatic) {
+                    if (configData.automatic.maxHours) Object.assign(this.automatic.maxHours, configData.automatic.maxHours);
+                    if (configData.automatic.thresholds) Object.assign(this.automatic.thresholds, configData.automatic.thresholds);
+                    if (configData.automatic.offThresholds) Object.assign(this.automatic.offThresholds, configData.automatic.offThresholds);
                 }
                 this.updateConfigUI();
                 this.setMode(this.mode, true);
@@ -1147,7 +1117,6 @@ class PoolCard extends HTMLElement {
             if (panelAutomatic) panelAutomatic.style.display = mode === 'automatic' ? 'block' : 'none';
         }
 
-        this.evaluateAutomation();
         if (!silent) {
             const modeNames = { manual: 'Manual', schedule: 'Horari', automatic: 'Automàtic' };
             this.showToast(`&#x1F4CB; Mode ${modeNames[mode]} activat`, 'success');
@@ -1160,6 +1129,7 @@ class PoolCard extends HTMLElement {
 
     // ===== TOGGLE ELEMENT (MANUAL MODE) =====
     async handleToggle(elementKey, isOn) {
+        if (this.elements[elementKey]?.isOn === isOn) return;
         if (this.mode !== 'manual') {
             this.showToast(`&#x26A0;&#xFE0F; En mode ${this.mode === 'schedule' ? 'horari' : 'automàtic'}, el control és automàtic`, 'error');
             this.updateUI();
@@ -1189,7 +1159,6 @@ class PoolCard extends HTMLElement {
         if (!isOn) {
             this.elements[elementKey].power = 0;
         }
-        this.trackElementTiming(elementKey);
 
         this.updateUI();
 
@@ -1201,8 +1170,7 @@ class PoolCard extends HTMLElement {
                 action: isOn ? 'on' : 'off'
             });
             this.showToast(`${isOn ? '&#x2705;' : '&#x1F504;'} ${this.getElementName(elementKey)} ${isOn ? 'encès' : 'apagat'}`);
-            // Refrescar estat per obtenir la potència actual
-            setTimeout(() => this.fetchInitialStatus(), 1000);
+            setTimeout(() => this.fetchPoolHours(), 2000);
         } catch (error) {
             this.showToast(`&#x274C; Error en controlar ${this.getElementName(elementKey)}`, 'error');
             console.error('Error controlling element:', error);
@@ -1218,121 +1186,8 @@ class PoolCard extends HTMLElement {
         return names[key] || key;
     }
 
-    // ===== EVALUATE AUTOMATION =====
-    async evaluateAutomation() {
-        if (this.mode === 'manual') return;
-
-        let newState = {
-            bombaDepuradora: false,
-            bombaNeteja: false,
-            cloradorSali: false
-        };
-
-        if (this.mode === 'schedule') {
-            newState = this.evaluateSchedule();
-        } else if (this.mode === 'automatic') {
-            newState = this.evaluateAutomatic();
-        }
-
-        for (const [key, val] of Object.entries(newState)) {
-            const el = this.elements[key];
-            if (el.isOn !== val) {
-                el.isOn = val;
-                if (!val) el.power = 0;
-                this.trackElementTiming(key);
-                try {
-                    const deviceId = encodeURIComponent(this.poolData?.deviceId || '');
-                    await window.apiClient.post(`/api/pool/control`, {
-                        deviceId: this.poolData?.deviceId,
-                        element: key,
-                        action: val ? 'on' : 'off'
-                    });
-                    console.log(`🤖 automation: ${key} → ${val ? 'ON' : 'OFF'} via MQTT`);
-                } catch (error) {
-                    console.warn(`🤖 automation: error sending ${key} ${val ? 'ON' : 'OFF'}:`, error.message);
-                }
-            }
-        }
-
-        this.updateUI();
-    }
-
-    evaluateSchedule() {
-        const now = new Date();
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-        function timeToMinutes(t) {
-            const [h, m] = t.split(':').map(Number);
-            return h * 60 + m;
-        }
-
-        const bombaOn = currentMinutes >= timeToMinutes(this.schedule.bombaDepuradora.start) &&
-            currentMinutes <= timeToMinutes(this.schedule.bombaDepuradora.end);
-
-        let netejaOn = false;
-        let cloradorOn = false;
-
-        if (bombaOn) {
-            netejaOn = currentMinutes >= timeToMinutes(this.schedule.bombaNeteja.start) &&
-                currentMinutes <= timeToMinutes(this.schedule.bombaNeteja.end);
-            cloradorOn = currentMinutes >= timeToMinutes(this.schedule.cloradorSali.start) &&
-                currentMinutes <= timeToMinutes(this.schedule.cloradorSali.end);
-        }
-
-        return {
-            bombaDepuradora: bombaOn,
-            bombaNeteja: netejaOn,
-            cloradorSali: cloradorOn
-        };
-    }
-
-    evaluateAutomatic() {
-        const excedentKW = this.solarExcedent;
-
-        function shouldBeOn(el, onThreshold, offThreshold, maxHours) {
-            const runningTime = el.isOn && el.startTime
-                ? (Date.now() - el.startTime) / 3600000
-                : 0;
-            const currentHours = el.hoursToday + runningTime;
-            if (currentHours >= maxHours) return false;
-            if (el.isOn) {
-                return excedentKW >= offThreshold;
-            } else {
-                return excedentKW >= onThreshold;
-            }
-        }
-
-        const bombaOn = shouldBeOn(
-            this.elements.bombaDepuradora,
-            this.automatic.thresholds.bombaDepuradora,
-            this.automatic.offThresholds.bombaDepuradora,
-            this.automatic.maxHours.bombaDepuradora
-        );
-
-        let netejaOn = false;
-        let cloradorOn = false;
-
-        if (bombaOn) {
-            netejaOn = shouldBeOn(
-                this.elements.bombaNeteja,
-                this.automatic.thresholds.bombaNeteja,
-                this.automatic.offThresholds.bombaNeteja,
-                this.automatic.maxHours.bombaNeteja
-            );
-            cloradorOn = shouldBeOn(
-                this.elements.cloradorSali,
-                this.automatic.thresholds.cloradorSali,
-                this.automatic.offThresholds.cloradorSali,
-                this.automatic.maxHours.cloradorSali
-            );
-        }
-
-        return {
-            bombaDepuradora: bombaOn,
-            bombaNeteja: netejaOn,
-            cloradorSali: cloradorOn
-        };
-    }
+    // ===== EVALUATE AUTOMATION (server-side - no-op al client) =====
+    async evaluateAutomation() {}
 
     // ===== UI UPDATE =====
     updateUI() {
@@ -1373,11 +1228,10 @@ class PoolCard extends HTMLElement {
                 console.warn(`⚠️ updateUI: metric[0] NOT found for [${key}]`);
             }
             if (hoursEl) {
-                const runningTime = el.isOn && el.startTime
-                    ? (Date.now() - el.startTime) / 3600000
-                    : 0;
-                const displayHours = el.hoursToday + runningTime;
-                hoursEl.textContent = `${displayHours.toFixed(2)} h`;
+                const totalMinutes = el.minutesToday || 0;
+                const h = Math.floor(totalMinutes / 60);
+                const m = totalMinutes % 60;
+                hoursEl.textContent = `${h}h ${m.toString().padStart(2, '0')}min`;
                 hoursEl.className = `metric-value ${el.isOn ? '' : 'off'}`;
             }
 
@@ -1409,24 +1263,23 @@ class PoolCard extends HTMLElement {
             console.log(`📊 totalPower# = ${totalPower.toFixed(1)} W`);
         }
         if (excedentEl) {
-            excedentEl.textContent = `${this.solarExcedent.toFixed(2)} kW`;
+            excedentEl.textContent = `${this.solarExcedent.toFixed(0)} W`;
             excedentEl.className = `stat-value ${this.solarExcedent >= 0 ? 'positive' : 'negative'}`;
         }
         if (elementsOnEl) elementsOnEl.textContent = `${onCount}/3`;
-        if (configExcedent) configExcedent.textContent = `${this.solarExcedent.toFixed(2)} kW`;
+        if (configExcedent) {
+            configExcedent.textContent = `${this.solarExcedent.toFixed(0)} W`;
+        }
     }
 
     testPowerUpdate() {
         console.log('🧪 testPowerUpdate: Simulating power values...');
         this.elements.bombaDepuradora.power = 1523.45;
         this.elements.bombaDepuradora.isOn = true;
-        this.trackElementTiming('bombaDepuradora');
         this.elements.bombaNeteja.power = 823.12;
         this.elements.bombaNeteja.isOn = true;
-        this.trackElementTiming('bombaNeteja');
         this.elements.cloradorSali.power = 245.67;
         this.elements.cloradorSali.isOn = true;
-        this.trackElementTiming('cloradorSali');
         this.updateUI();
         console.log('🧪 testPowerUpdate: Done. Check DOM values.');
     }
@@ -1457,113 +1310,24 @@ class PoolCard extends HTMLElement {
         });
     }
 
-    // ===== SSE =====
-    initializeSSE() {
-        if (!window.SSEManager) return;
-        if (this.sseManager) return;
-
-        try {
-            this.sseManager = new SSEManager('/api/sse/pool');
-            this.sseManager.addCallback((data) => {
-                if (data.topic && this.poolData?.deviceId) {
-                    const cups = this.poolData.deviceId.split('/')[1] || '';
-                    if (data.topic.includes(cups.trim())) {
-                        this.handleSSEMessage(data);
-                    }
-                }
-                if (data.solarExcedent !== undefined) {
-                    this.solarExcedent = data.solarExcedent;
-                    this.updateUI();
-                }
-            });
-        } catch (error) {
-            console.warn('No s\'ha pogut inicialitzar SSE:', error.message);
-        }
-    }
-
-    handleSSEMessage(data) {
-        try {
-            const topic = data.topic;
-            const rawPayload = data.payload;
-
-            // Handle numeric payloads from Shelly MQTT (e.g., "11.86")
-            // Extract element key from topic (case-insensitive)
-            const topicLower = topic.toLowerCase();
-            let elementKey = null;
-            for (const key of Object.keys(this.elements)) {
-                if (topicLower.includes(key.toLowerCase())) {
-                    elementKey = key;
-                    break;
-                }
-            }
-
-            if (!elementKey) {
-                // Pot ser un tema d'excedent solar
-                if (rawPayload !== undefined && data.solarExcedent !== undefined) {
-                    this.solarExcedent = data.solarExcedent;
-                    this.updateUI();
-                }
-                return;
-            }
-
-            const el = this.elements[elementKey];
-
-            // Parse numeric payload from emeter topics
-            const numericValue = parseFloat(rawPayload);
-            const isNumeric = !isNaN(numericValue) && rawPayload !== 'true' && rawPayload !== 'false';
-
-            if (topic.includes('/relay/') && !topic.includes('/command')) {
-                // relay/0 or relay/1 -> output state (on/off)
-                const newIsOn = rawPayload === 'on' || rawPayload === 'true' || numericValue === 1;
-                if (newIsOn !== el.isOn) {
-                    el.isOn = newIsOn;
-                    this.trackElementTiming(elementKey);
-                }
-            } else if (topic.includes('/emeter/0/power') && topic.endsWith('/emeter/0/power') && isNumeric) {
-                // només emeter/0/power (no emeter/1/power)
-                el.power = numericValue;
-                const newIsOn = numericValue > 0;
-                if (newIsOn !== el.isOn) {
-                    el.isOn = newIsOn;
-                    this.trackElementTiming(elementKey);
-                }
-            }
-
-            if (this.mode !== 'manual') {
-                this.evaluateAutomation();
-            }
-
-            this.updateUI();
-            this.lastUpdate = new Date().toISOString();
-        } catch (error) {
-            console.warn('Error processant missatge SSE:', error.message);
-        }
-    }
-
     // ===== POLLING =====
     startPolling() {
-        this.pollInterval = setInterval(() => {
-            if (this.mode !== 'manual') {
-                this.evaluateAutomation();
-            }
-        }, 30000);
-
         this.statusCheckInterval = setInterval(() => {
             this.fetchInitialStatus();
-        }, 60000);
+        }, 3000);
 
         this.fetchSolarExcedent();
         this.excedentInterval = setInterval(() => this.fetchSolarExcedent(), 10000);
-
-        this.timeInterval = setInterval(() => this.updateUI(), 5000);
+        this.hoursInterval = setInterval(() => this.fetchPoolHours(), 60000);
     }
 
     async fetchSolarExcedent() {
         try {
             if (!window.apiClient) return;
-            const { data } = await window.apiClient.get('/api/dashboard/power/difference');
+            const res = await window.apiClient.get('/api/dashboard/power/difference');
+            const data = res.data;
             if (data?.difference !== undefined) {
-                this.solarExcedent = data.difference;
+                this.solarExcedent = data.difference * 1000;
                 this.updateUI();
             }
         } catch (error) {
@@ -1575,10 +1339,9 @@ class PoolCard extends HTMLElement {
         this.showLoading(true);
         try {
             const deviceId = encodeURIComponent(this.poolData?.deviceId || '');
-            const { data } = await window.apiClient.post(`/api/pool/status_update`, {
+            await window.apiClient.post(`/api/pool/status_update`, {
                 deviceId: this.poolData?.deviceId
             });
-            if (data) this.updateFromStatus(data);
             this.showToast('&#x1F504; Estat actualitzat', 'success');
         } catch (error) {
             console.error('Error requesting status update:', error);

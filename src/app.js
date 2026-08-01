@@ -23,6 +23,10 @@ const plugsRoutes = require('./routes/plugs');
 const poolRoutes = require('./routes/pool');
 const automationRoutes = require('./routes/automation');
 const sseRoutes = require('./routes/sse');
+const consumtionsRoutes = require('./routes/consumtions');
+const balancRoutes = require('./routes/balanc');
+const statisticsRoutes = require('./routes/statistics');
+const energyMetricsRoutes = require('./routes/energyMetrics');
 
 class ExpressApp {
   constructor() {
@@ -89,7 +93,8 @@ class ExpressApp {
         'http://localhost:3001',
         'https://accounts.google.com',
         'https://www.googleapis.com',
-        'https://gestio.pescaenergia.cat'
+        'https://gestio.pescaenergia.cat',
+        'https://gestio.pescaenergia.eu'
       ],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -354,6 +359,10 @@ class ExpressApp {
     this.app.use('/api/pool', poolRoutes);
     this.app.use('/api/automation', automationRoutes);
     this.app.use('/api/sse', sseRoutes);
+    this.app.use('/api/consumtions', consumtionsRoutes);
+    this.app.use('/api/balanc', balancRoutes);
+    this.app.use('/api/statistics', statisticsRoutes);
+    this.app.use('/api/energy-metrics', energyMetricsRoutes);
 
     // Rutas del frontend (área de usuario)
     this.app.use('/area-usuari', frontendRoutes);

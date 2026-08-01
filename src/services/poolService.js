@@ -1,5 +1,6 @@
 const logger = require('../utils/logger');
 const database = require('../utils/database');
+const { getTodayLocal } = require('../utils/dateUtils');
 const MqttService = require('./mqtt/mqttService');
 
 class PoolService {
@@ -197,6 +198,14 @@ class PoolService {
 
   async getPoolStatus(deviceId) {
     try {
+      // Primera font: cache en memòria actualitzat per MQTT (temps real)
+      const poolStateCache = require('./poolStateCache');
+      const cached = poolStateCache.getState();
+      if (cached.lastUpdate) {
+        return cached;
+      }
+
+      // Fallback: base de dades (si el cache encara no té dades)
       const device = await this.findDeviceByShellyId(deviceId);
       if (!device) {
         return {
@@ -211,14 +220,6 @@ class PoolService {
         };
       }
 
-      const statesQuery = `
-        SELECT state_name, state_value_boolean, state_value_numeric, last_updated
-        FROM device_states
-        WHERE device_id = $1::uuid
-        ORDER BY last_updated DESC
-      `;
-      const statesResult = await database.query(statesQuery, [device.id]);
-
       const elements = {
         bombaDepuradora: { isOn: false, power: 0, isOnline: false },
         bombaNeteja: { isOn: false, power: 0, isOnline: false },
@@ -227,55 +228,40 @@ class PoolService {
 
       let lastUpdate = null;
 
-      // Process states stored with pool element naming (bombaDepuradora_apower, etc.)
-      for (const row of statesResult.rows) {
-        const stateName = row.state_name;
-        let elementKey = null;
-        let metricType = null;
-
-        if (stateName.startsWith('bombaDepuradora_')) {
-          elementKey = 'bombaDepuradora';
-          metricType = stateName.replace('bombaDepuradora_', '');
-        } else if (stateName.startsWith('bombaNeteja_')) {
-          elementKey = 'bombaNeteja';
-          metricType = stateName.replace('bombaNeteja_', '');
-        } else if (stateName.startsWith('cloradorSali_')) {
-          elementKey = 'cloradorSali';
-          metricType = stateName.replace('cloradorSali_', '');
-        }
-
-        if (elementKey && metricType) {
-          if (metricType === 'output' && row.state_value_boolean !== null) {
-            elements[elementKey].isOn = row.state_value_boolean;
-          } else if (metricType === 'apower' && row.state_value_numeric !== null) {
-            elements[elementKey].power = row.state_value_numeric;
-          }
-        }
-
-        if (!lastUpdate || new Date(row.last_updated) > new Date(lastUpdate)) {
-          lastUpdate = row.last_updated;
-        }
-      }
-
-      // Also try to read states from MQTT-created device (by CUPS only)
-      // The MQTT normalizer stores states like emeter_0_power and relay_0
-      // under deviceId = CUPS (without the "DepuradoraPiscina/" prefix)
+      // Llegir estats dels dispositius MQTT de piscina
       const cups = device.shelly_device_id.split('/')[1] || '';
       if (cups) {
         try {
-          // Trobar TOTS els dispositius MQTT que coincideixin amb el CUPS
-          // (pot haver-n'hi un amb espai final del normalitzador vell i un sense del nou)
+          const trimmedCups = cups.trim();
           const mqttFindQuery = `
             SELECT id, shelly_device_id FROM devices
             WHERE shelly_device_id LIKE $1
-            AND shelly_device_id NOT LIKE 'DepuradoraPiscina/%'
+               OR shelly_device_id LIKE $2
+               OR shelly_device_id LIKE $3
+               OR (shelly_device_id LIKE $4 AND shelly_device_id NOT LIKE $5)
             ORDER BY created_at DESC
           `;
-          const mqttFindResult = await database.query(mqttFindQuery, [`${cups.trim()}%`]);
+          const mqttFindResult = await database.query(mqttFindQuery, [
+            `BombaDepuradora/${trimmedCups}%`,
+            `BombaNet/${trimmedCups}%`,
+            `CloradorSali/${trimmedCups}%`,
+            `${trimmedCups}%`,
+            'DepuradoraPiscina/%'
+          ]);
           const mqttDevices = mqttFindResult.rows || [];
 
-          // Fusionar estats de TOTS els dispositius MQTT que coincideixin
           for (const mqttDevice of mqttDevices) {
+            const sdId = mqttDevice.shelly_device_id;
+            let elementKey = null;
+            if (sdId.startsWith('BombaDepuradora/') || sdId === trimmedCups) {
+              elementKey = 'bombaDepuradora';
+            } else if (sdId.startsWith('BombaNet/')) {
+              elementKey = 'bombaNeteja';
+            } else if (sdId.startsWith('CloradorSali/')) {
+              elementKey = 'cloradorSali';
+            }
+            if (!elementKey) continue;
+
             const mqttStatesQuery = `
               SELECT state_name, state_value_boolean, state_value_numeric, last_updated
               FROM device_states
@@ -285,12 +271,12 @@ class PoolService {
 
             for (const row of mqttResult.rows) {
               if (row.state_name === 'emeter_0_power' && row.state_value_numeric !== null) {
-                elements.bombaDepuradora.power = row.state_value_numeric;
+                elements[elementKey].power = row.state_value_numeric;
               } else if (row.state_name === 'relay_0') {
                 if (row.state_value_boolean !== null) {
-                  elements.bombaDepuradora.isOn = row.state_value_boolean;
+                  elements[elementKey].isOn = row.state_value_boolean;
                 } else if (row.state_value_numeric !== null) {
-                  elements.bombaDepuradora.isOn = row.state_value_numeric === 1;
+                  elements[elementKey].isOn = row.state_value_numeric === 1;
                 }
               }
               if (!lastUpdate || new Date(row.last_updated) > new Date(lastUpdate)) {
@@ -299,7 +285,7 @@ class PoolService {
             }
           }
         } catch (err) {
-          this.logger.warn('No s\'ha pogut llegir estat MQTT del dispositiu:', {
+          this.logger.warn('Error llegint estats MQTT de BBDD:', {
             cups,
             error: err.message
           });
@@ -347,6 +333,69 @@ class PoolService {
     }
   }
 
+  async getPoolHours(deviceId) {
+    try {
+      const device = await this.findDeviceByShellyId(deviceId);
+      if (!device) return { date: '', bombaDepuradora: 0, bombaNeteja: 0, cloradorSali: 0 };
+
+      const query = `
+        SELECT config_data
+        FROM automation_configs
+        WHERE device_id = $1::uuid
+        AND config_name = 'pool_hours'
+        AND is_active = true
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `;
+      const result = await database.query(query, [device.id]);
+
+      const today = getTodayLocal();
+
+      if (result.rows.length > 0) {
+        const data = result.rows[0].config_data;
+        if (data.date === today) {
+          return data;
+        }
+      }
+
+      return { date: today, bombaDepuradora: 0, bombaNeteja: 0, cloradorSali: 0 };
+    } catch (error) {
+      this.logger.error('Error getting pool hours', { deviceId, error: error.message });
+      throw error;
+    }
+  }
+
+  async savePoolHours(deviceId, hoursData) {
+    try {
+      const device = await this.findDeviceByShellyId(deviceId);
+      if (!device) throw new Error('Dispositiu de piscina no trobat');
+
+      const existingQuery = `
+        SELECT id FROM automation_configs
+        WHERE device_id = $1::uuid AND config_name = 'pool_hours'
+      `;
+      const existingResult = await database.query(existingQuery, [device.id]);
+
+      if (existingResult.rows.length > 0) {
+        await database.query(`
+          UPDATE automation_configs
+          SET config_data = $1, updated_at = NOW()
+          WHERE device_id = $2::uuid AND config_name = 'pool_hours'
+        `, [JSON.stringify(hoursData), device.id]);
+      } else {
+        await database.query(`
+          INSERT INTO automation_configs (device_id, config_name, config_data, is_active)
+          VALUES ($1::uuid, 'pool_hours', $2, true)
+        `, [device.id, JSON.stringify(hoursData)]);
+      }
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error('Error saving pool hours', { deviceId, error: error.message });
+      throw error;
+    }
+  }
+
   async controlElement(deviceId, element, action) {
     try {
       const device = await this.findDeviceByShellyId(deviceId);
@@ -366,7 +415,12 @@ class PoolService {
       await this.ensureMqttConnection();
 
       const cups = device.shelly_device_id.split('/')[1] || '';
-      const shellyName = element.charAt(0).toUpperCase() + element.slice(1);
+      const elementToShelly = {
+        bombaDepuradora: 'BombaDepuradora',
+        bombaNeteja: 'BombaNet',
+        cloradorSali: 'CloradorSali'
+      };
+      const shellyName = elementToShelly[element];
       const topic = `shellies/${shellyName}/${cups} /relay/0/command`;
 
       this.logger.info('Controlant element de piscina via MQTT', {
@@ -374,6 +428,9 @@ class PoolService {
       });
 
       await this.publishMqttCommand(topic, action);
+
+      const poolStateCache = require('./poolStateCache');
+      poolStateCache.setElementState(element, action === 'on');
 
       return {
         success: true,

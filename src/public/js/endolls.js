@@ -132,10 +132,11 @@ class EndollsManager {
 
     /**
      * Renderiza la lista de endolls usando web components
-     * Només mostra plug-card per dispositius ACS (shelly_device_id que comenci per "acs/")
+     * Mostra plug-card per dispositius ACS i ACT (shelly_device_id que comenci per "acs/" o "act/")
      */
     renderPlugs(plugs) {
-        const acsPlugs = (plugs || []).filter(p => p.shelly_device_id && p.shelly_device_id.startsWith('acs/'));
+        const validPrefixes = ['acs/', 'act/'];
+        const acsPlugs = (plugs || []).filter(p => p.shelly_device_id && validPrefixes.some(prefix => p.shelly_device_id.startsWith(prefix)));
 
         if (acsPlugs.length === 0) {
             this.showEmptyState();

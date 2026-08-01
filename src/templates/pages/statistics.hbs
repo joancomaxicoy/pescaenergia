@@ -1,0 +1,197 @@
+<link rel="stylesheet" href="/css/statistics.css">
+
+<div class="stats-container" id="statsContainer" data-cups="{{user.cups}}">
+    <!-- Header -->
+    <div class="stats-header">
+        <div>
+            <h1>Estadistiques de <span>Consum</span></h1>
+            <div class="stats-header-subtitle">
+                Analisi detallat del consum energetic per aparells
+                <span id="periodDisplay"></span>
+            </div>
+        </div>
+        <div class="stats-header-actions">
+            <button class="btn-stats btn-success-stats" onclick="generatePDF()">
+                Generar PDF
+            </button>
+            <button class="btn-stats btn-primary-stats" onclick="showEmailModal()">
+                Enviar per mail
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="stats-filters-panel">
+        <div class="stats-filters-grid">
+            <div class="stats-filter-group">
+                <label>Aparells a analitzar</label>
+                <div class="stats-device-tags" id="deviceTags">
+                    {{#each userDevices}}
+                    <span class="stats-device-tag active" data-device="{{tag}}">
+                        <span class="stats-color-dot" style="background: {{color}};"></span> {{name}}
+                    </span>
+                    {{/each}}
+                </div>
+            </div>
+
+            <div class="stats-filter-group">
+                <label>Periode</label>
+                <div class="stats-date-row">
+                    <input type="date" id="dateFrom">
+                    <span class="stats-date-arrow">-></span>
+                    <input type="date" id="dateTo">
+                </div>
+                <div class="stats-quick-filters">
+                    <button class="stats-quick-btn" data-days="7">Ultims 7 dies</button>
+                    <button class="stats-quick-btn" data-days="15">15 dies</button>
+                    <button class="stats-quick-btn active" data-days="30">30 dies</button>
+                    <button class="stats-quick-btn" data-days="90">90 dies</button>
+                </div>
+            </div>
+
+            <div class="stats-filter-group stats-filter-actions">
+                <button class="btn-stats btn-primary-stats" onclick="updateDashboard()">
+                    Actualitzar dades
+                </button>
+                <button class="btn-stats btn-reset-stats" onclick="resetFilters()">
+                    Reiniciar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="stats-kpi-grid" id="kpiGrid">
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-label">Consum Total</div>
+            <div class="stats-kpi-value" id="kpiConsumption" style="color: #1a1a2e;">--</div>
+            <div class="stats-kpi-sub" id="kpiConsumptionSub"></div>
+        </div>
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-label">Generacio Solar</div>
+            <div class="stats-kpi-value" id="kpiSolar" style="color: #ffd93d;">--</div>
+            <div class="stats-kpi-sub" id="kpiSolarSub"></div>
+        </div>
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-label">Solar Aprofitada</div>
+            <div class="stats-kpi-value" id="kpiSolarUsed" style="color: #8bc34a;">--</div>
+            <div class="stats-kpi-sub" id="kpiSolarUsedSub"></div>
+        </div>
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-label">Energia de Xarxa</div>
+            <div class="stats-kpi-value" id="kpiGrid_" style="color: #ff6b6b;">--</div>
+            <div class="stats-kpi-sub" id="kpiGridSub"></div>
+        </div>
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-label">Exportacio a la Xarxa</div>
+            <div class="stats-kpi-value" id="kpiExport" style="color: #4a90d9;">--</div>
+            <div class="stats-kpi-sub" id="kpiExportSub"></div>
+        </div>
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-label">Aprofitament Solar</div>
+            <div class="stats-kpi-value" id="kpiSelfConsumption" style="color: #4ecdc4;">--</div>
+            <div class="stats-kpi-sub" id="kpiSelfConsumptionSub"></div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="stats-charts-grid">
+        <div class="stats-chart-container">
+            <h3>Consum per aparell (evolucio temporal)</h3>
+            <canvas id="consumptionChart"></canvas>
+        </div>
+        <div class="stats-chart-container">
+            <h3>Solar vs Xarxa</h3>
+            <canvas id="solarGridChart"></canvas>
+        </div>
+        <div class="stats-chart-container stats-chart-full">
+            <h3>Balanc energetic per aparell</h3>
+            <canvas id="balanceChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="stats-summary-section">
+        <h3>Resum del periode</h3>
+        <div class="stats-summary-grid">
+            <div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Consum total</span>
+                    <span class="stats-summary-value" id="sumConsumption">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Generacio solar</span>
+                    <span class="stats-summary-value" id="sumSolar">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Energia de xarxa</span>
+                    <span class="stats-summary-value" id="sumGrid">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Exportacio a la xarxa</span>
+                    <span class="stats-summary-value" id="sumExport" style="color: #4a90d9;">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Autoconsum solar</span>
+                    <span class="stats-summary-value" id="sumSelfConsumption">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Solar aprofitada</span>
+                    <span class="stats-summary-value" id="sumSolarUsed" style="color: #8bc34a;">--</span>
+                </div>
+            </div>
+            <div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">CO2 estalviat</span>
+                    <span class="stats-summary-value" id="sumCo2">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Estalvi economic</span>
+                    <span class="stats-summary-value" id="sumSaving" style="color: #2e7d32;">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Dies analitzats</span>
+                    <span class="stats-summary-value" id="sumDays">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Mitjana diaria</span>
+                    <span class="stats-summary-value" id="sumAvg">--</span>
+                </div>
+            </div>
+        </div>
+
+        <h4>Desglossament per aparell</h4>
+        <div class="stats-device-breakdown" id="deviceBreakdown"></div>
+    </div>
+</div>
+
+<!-- Email Modal -->
+<div class="stats-modal-overlay" id="emailModal">
+    <div class="stats-modal">
+        <h2>Enviar informe per email</h2>
+        <p style="color: #666; margin-bottom: 20px;">L'informe s'enviara en format PDF amb les estadistiques seleccionades.</p>
+        <div class="stats-form-group">
+            <label>Email destinatari</label>
+            <input type="email" id="emailInput" placeholder="exemple@domini.com">
+        </div>
+        <div class="stats-form-group">
+            <label>Missatge (opcional)</label>
+            <input type="text" id="emailMessage" placeholder="Missatge addicional...">
+        </div>
+        <div class="stats-modal-actions">
+            <button class="btn-stats btn-primary-stats" onclick="sendEmail()" style="flex: 1; justify-content: center;">
+                Enviar informe
+            </button>
+            <button class="btn-stats btn-reset-stats" onclick="closeEmailModal()">
+                Cancel-lar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="stats-toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/min/moment.min.js"></script>
+<script src="/js/statistics.js"></script>

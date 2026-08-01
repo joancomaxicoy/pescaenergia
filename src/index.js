@@ -28,9 +28,28 @@ class PescaEnergiaBackend {
       // Registrar el servicio MQTT en el registry para acceso global
       mqttServiceRegistry.register(this.mqttDataService);
 
+      // Inicialitzar cache d'estat de la piscina (temps real, sense BBDD)
+      const poolStateCache = require('./services/poolStateCache');
+      poolStateCache.init();
+
       // Inicializar el servicio de plugs (que incluye el nuevo AutomationManager)
       const PlugsService = require('./services/plugsService');
       this.plugsService = new PlugsService();
+
+      // Inicializar el servicio de cálculo de horas de la piscina (cron cada 60s)
+      const PoolHoursService = require('./services/poolHoursService');
+      this.poolHoursService = new PoolHoursService();
+      this.poolHoursService.start();
+
+      // Inicializar el servicio de automatización de la piscina (server-side, cron cada 30s)
+      const PoolAutomationService = require('./services/poolAutomationService');
+      this.poolAutomationService = new PoolAutomationService();
+      this.poolAutomationService.start();
+
+      // Inicializar el servicio de registre de consums (cron cada ¼ d'hora)
+      const ConsumptionService = require('./services/consumptionService');
+      this.consumptionService = new ConsumptionService();
+      this.consumptionService.start();
 
       // Inicializar y iniciar el nuevo AutomationManager
       await this.plugsService.initializeAutomationManager();
@@ -121,6 +140,21 @@ class PescaEnergiaBackend {
         // Cerrar servidor Express
         if (this.expressApp) {
           await this.expressApp.stop();
+        }
+
+        // Cerrar servicio de horas de piscina
+        if (this.poolHoursService) {
+          this.poolHoursService.stop();
+        }
+
+        // Cerrar servicio de automatización de piscina
+        if (this.poolAutomationService) {
+          this.poolAutomationService.stop();
+        }
+
+        // Cerrar servicio de registre de consums
+        if (this.consumptionService) {
+          this.consumptionService.stop();
         }
 
         // Cerrar servicio de automatización

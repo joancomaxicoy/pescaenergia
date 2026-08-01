@@ -51,5 +51,9 @@ Thumbs.db
 
 .clinerules/
 
+# opencode conversations
+xat_OpenCode.txt
+*RESPOSTES-OPENCODE.md
+
 .env
 .env.local

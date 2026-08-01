@@ -1,6 +1,7 @@
 const UserParticipationService = require('./userParticipationService');
 const DeviceHistoryService = require('./deviceHistoryService');
 const logger = require('../utils/logger');
+const database = require('../utils/database');
 const {
   getDeviceTypeFromTopic,
   getPowerMetrics,
@@ -817,139 +818,105 @@ class DashboardService {
    */
   async getRealtimePower(userId) {
     try {
-      // Obtener datos históricos de las últimas 24h para extraer el último valor
-      const historicalData = await this.getHistoricalChartData(userId, '24h');
+      const [userDevices, participations] = await Promise.all([
+        this.getUserDevices(userId),
+        this.userParticipationService.getUserParticipations(userId)
+      ]);
 
-      const consumptionDatasets = historicalData.datasets.filter(d => d.type === 'consumption');
-      const generationDatasets = historicalData.datasets.filter(d => d.type === 'generation');
+      const promises = [];
 
-      // Crear un mapa de timestamps con datos de consumo y generación
-      const timestampData = new Map();
-      
-      // Iterar sobre todos los timestamps de atrás hacia adelante
-      for (let i = historicalData.labels.length - 1; i >= 0; i--) {
-        const timestamp = historicalData.labels[i];
-        let hasConsumption = false;
-        let hasGeneration = false;
-        let consumptionValue = 0;
-        let generationValue = 0;
-
-        // Verificar si hay datos de consumo en este timestamp
-        consumptionDatasets.forEach(dataset => {
-          const value = dataset.data[i];
-          if (value !== null && value !== undefined && value > 0) {
-            hasConsumption = true;
-            consumptionValue += value;
+      if (userDevices && userDevices.length > 0) {
+        for (const device of userDevices) {
+          let deviceType = 'SHELLY_EM';
+          if (device.device_type === 'PLUG') {
+            deviceType = 'PLUG';
           }
-        });
+          const deviceMetrics = this.getDeviceMetrics(device.id, deviceType);
+          const powerMetric = deviceMetrics.powerMetrics[0] + '_avg';
 
-        // Verificar si hay datos de generación en este timestamp
-        generationDatasets.forEach(dataset => {
-          const value = dataset.data[i];
-          if (value !== null && value !== undefined && value > 0) {
-            hasGeneration = true;
-            generationValue += value;
-          }
-        });
-
-        // Solo guardar timestamps donde tengamos al menos uno de los dos
-        if (hasConsumption || hasGeneration) {
-          timestampData.set(timestamp, {
-            consumption: consumptionValue,
-            generation: generationValue,
-            hasConsumption,
-            hasGeneration,
-            index: i
-          });
+          promises.push(
+            this.getLatestMetricValue(device.id, powerMetric)
+              .then(value => ({
+                deviceId: device.id,
+                deviceName: device.device_name,
+                userCups: device.user_cups,
+                type: 'consumption',
+                power: value || 0
+              }))
+          );
         }
       }
 
-      // Buscar el timestamp más reciente donde tengamos AMBOS valores
-      let syncedTimestamp = null;
-      let syncedConsumption = 0;
-      let syncedGeneration = 0;
-      let syncedIndex = -1;
+      if (participations && participations.length > 0) {
+        for (const participation of participations) {
+          if (participation.generator_active) {
+            // Resoldre el codi del generador a l'ID real (ex: "giravolt" -> "gen-giravolt")
+            const resolutionPromise = this.deviceHistoryService.getDeviceInfo(participation.generator_code)
+              .then(deviceInfo => {
+                if (!deviceInfo) {
+                  logger.warn('Generador no trobat a la configuració', { generatorCode: participation.generator_code });
+                  return null;
+                }
+                const realDeviceId = deviceInfo.id;
+                const deviceMetrics = this.getDeviceMetrics(participation.generator_code, 'GENERATOR');
+                const powerMetric = deviceMetrics.powerMetrics[0] + '_avg';
+                return this.getLatestMetricValue(realDeviceId, powerMetric);
+              })
+              .then(value => value !== null ? {
+                generatorCode: participation.generator_code,
+                generatorName: participation.generator_name,
+                participationPercentage: participation.participation_percentage,
+                type: 'generation',
+                power: value || 0
+              } : null);
 
-      for (const [timestamp, data] of timestampData) {
-        if (data.hasConsumption && data.hasGeneration) {
-          syncedTimestamp = timestamp;
-          syncedConsumption = data.consumption;
-          syncedGeneration = data.generation;
-          syncedIndex = data.index;
-          break;
+            promises.push(resolutionPromise);
+          }
         }
       }
 
-      // Si no encontramos un timestamp con ambos, usar el más reciente disponible
-      if (!syncedTimestamp && timestampData.size > 0) {
-        const firstEntry = timestampData.entries().next().value;
-        syncedTimestamp = firstEntry[0];
-        syncedConsumption = firstEntry[1].consumption;
-        syncedGeneration = firstEntry[1].generation;
-        syncedIndex = firstEntry[1].index;
-        
-        logger.warn('No se encontró timestamp sincronizado, usando el más reciente', {
-          userId,
-          hasConsumption: firstEntry[1].hasConsumption,
-          hasGeneration: firstEntry[1].hasGeneration
-        });
-      }
+      const results = await Promise.all(promises);
 
-      // Construir información detallada de los generadores usando el índice sincronizado
+      const consumptionResults = results.filter(r => r && r.type === 'consumption');
+      const generationResults = results.filter(r => r && r.type === 'generation');
+
+      const lastConsumptionPower = consumptionResults.reduce((sum, r) => sum + r.power, 0);
+
       const generators = [];
       let totalGenerationPower = 0;
 
-      if (syncedIndex >= 0) {
-        for (const dataset of generationDatasets) {
-          const value = dataset.data[syncedIndex];
-          const lastPower = (value !== null && value !== undefined) ? value : 0;
+      for (const result of generationResults) {
+        const lastPower = result.power;
+        const participation = result.participationPercentage || 0;
+        const myPower = participation > 0 ? (lastPower * participation) / 100 : lastPower;
 
-          // Extraer información del label (formato: "Nombre (XX%)")
-          const label = dataset.label || '';
-          const participationMatch = label.match(/\((\d+(?:\.\d+)?)\%\)/);
-          const participation = participationMatch ? parseFloat(participationMatch[1]) : 0;
-          const name = label.replace(/\s*\(\d+(?:\.\d+)?\%\)/, '').trim();
+        generators.push({
+          name: result.generatorName,
+          participation,
+          myPower,
+          totalPower: lastPower
+        });
 
-          generators.push({
-            name,
-            participation,
-            myPower: lastPower,
-            totalPower: participation > 0 ? (lastPower * 100) / participation : 0
-          });
-
-          totalGenerationPower += lastPower;
-        }
+        totalGenerationPower += myPower;
       }
 
-      // Usar los valores sincronizados para calcular el balance
-      const lastConsumptionPower = syncedConsumption;
       const difference = lastConsumptionPower - totalGenerationPower;
       const selfConsumptionPercentage = lastConsumptionPower > 0 
         ? Math.min(100, (totalGenerationPower / lastConsumptionPower) * 100) 
         : 0;
 
-      logger.info('Potencia en tiempo real calculada con timestamps sincronizados', {
-        userId,
-        syncedTimestamp,
-        consumption: lastConsumptionPower,
-        generation: totalGenerationPower,
-        difference,
-        selfConsumptionPercentage: selfConsumptionPercentage.toFixed(1),
-        isSynced: syncedIndex >= 0
-      });
-
       return {
         consumption: {
-          power: lastConsumptionPower,
-          timestamp: syncedTimestamp
+          power: Math.round(lastConsumptionPower * 1000) / 1000,
+          timestamp: null
         },
         generation: {
-          totalPower: totalGenerationPower,
+          totalPower: Math.round(totalGenerationPower * 1000) / 1000,
           generators
         },
         balance: {
-          difference,
-          selfConsumptionPercentage,
+          difference: Math.round(difference * 1000) / 1000,
+          selfConsumptionPercentage: Math.round(selfConsumptionPercentage * 10) / 10,
           status: difference > 0 ? 'from_grid' : (difference < 0 ? 'surplus' : 'balanced')
         }
       };
@@ -961,6 +928,30 @@ class DashboardService {
         stack: error.stack
       });
       throw error;
+    }
+  }
+
+  async getLatestMetricValue(deviceId, metricName) {
+    const query = `
+      SELECT value
+      FROM energy_metrics
+      WHERE device_id = $1
+        AND metric_name = $2
+        AND timestamp >= NOW() - INTERVAL '24 hours'
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `;
+
+    try {
+      const result = await database.query(query, [deviceId, metricName]);
+      return result.rows.length > 0 ? result.rows[0].value : 0;
+    } catch (error) {
+      logger.warn('Error obteniendo último valor de métrica:', {
+        deviceId,
+        metricName,
+        error: error.message
+      });
+      return 0;
     }
   }
 

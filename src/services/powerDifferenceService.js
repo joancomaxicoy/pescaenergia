@@ -6,6 +6,12 @@ const { getPowerMetrics } = require('../config/device-metrics-config');
 class PowerDifferenceService {
   constructor() {
     this.database = database;
+    this.cache = new Map();
+    this.CACHE_TTL_MS = 30000;
+  }
+
+  generateCacheKey(userIds) {
+    return [...userIds].sort().join(',');
   }
 
   /**
@@ -14,6 +20,13 @@ class PowerDifferenceService {
    * @returns {Object} - Diferencias por usuario
    */
   async getPowerDifference(userIds) {
+    const cacheKey = this.generateCacheKey(userIds);
+    const cached = this.cache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL_MS) {
+      logger.debug('Usando cache de powerDifference', { cacheKey });
+      return cached.data;
+    }
+
     try {
       logger.info('Iniciando cálculo de diferencias de potencia', { userCount: userIds.length });
 
@@ -66,6 +79,8 @@ class PowerDifferenceService {
           results[userId] = userResult;
         }
       }
+
+      this.cache.set(cacheKey, { data: results, timestamp: Date.now() });
 
       logger.info('Cálculo de diferencias completado', {
         usersProcessed: Object.keys(results).length,
@@ -139,36 +154,25 @@ class PowerDifferenceService {
   /**
    * Obtiene las últimas métricas de potencia para los dispositivos
    * @param {Array<string>} deviceIds - IDs de dispositivos
-   * @returns {Map<string, number>} - Map de deviceId -> valor de potencia promedio
+   * @returns {Map<string, number>} - Map de deviceId -> valor de potencia en kW
    */
   async getLatestPowerMetrics(deviceIds) {
     if (deviceIds.length === 0) {
       return new Map();
     }
 
-    // Obtener tipos de métricas de potencia para diferentes dispositivos
     const powerMetricNames = new Set();
-
-    // Métricas para EM
     const emPowerMetrics = getPowerMetrics('SHELLY_EM');
-    emPowerMetrics.forEach(metric => {
-      powerMetricNames.add(`${metric}_avg`);
-    });
-
-    // Métricas para generadores
+    emPowerMetrics.forEach(metric => powerMetricNames.add(`${metric}_avg`));
     const generatorPowerMetrics = getPowerMetrics('GENERATOR');
-    generatorPowerMetrics.forEach(metric => {
-      powerMetricNames.add(`${metric}_avg`);
-    });
+    generatorPowerMetrics.forEach(metric => powerMetricNames.add(`${metric}_avg`));
 
     const metricNamesArray = Array.from(powerMetricNames);
 
     const query = `
       SELECT DISTINCT ON (device_id, metric_name)
         device_id,
-        metric_name,
-        value,
-        timestamp
+        value
       FROM energy_metrics
       WHERE device_id = ANY($1)
         AND metric_name = ANY($2)
@@ -178,16 +182,10 @@ class PowerDifferenceService {
 
     const result = await this.database.query(query, [deviceIds, metricNamesArray]);
 
-    // Crear mapa de deviceId -> valor de potencia
     const metricsMap = new Map();
-
     for (const row of result.rows) {
-      // Para EM, usar la primera métrica disponible
-      // Para generadores, usar la primera métrica disponible
       if (!metricsMap.has(row.device_id)) {
-        // Convertir a kW si es necesario (asumiendo que viene en W)
-        const valueInKw = row.value / 1000;
-        metricsMap.set(row.device_id, valueInKw);
+        metricsMap.set(row.device_id, row.value / 1000);
       }
     }
 
