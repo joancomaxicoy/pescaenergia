@@ -156,28 +156,32 @@ class ConsumptionService {
       previousRawTs = new Date(prevResult.rows[0].timestamp);
     }
 
-    // Sanity check: total never decreases
+    // Delta = consumed energy in Wh since last record
+    let energiaWh;
+    let potenciaW;
+    const energiaTotalWh = current.value;
+
     if (current.value < previousTotal) {
-      logger.warn('Energia total disminueix — possible error de dispositiu', {
+      // El comptador ha baixat (reset/reinici del dispositiu): re-baseline a
+      // l'acumulat actual amb energia 0 per no bloquejar la ingesta permanentment.
+      logger.warn('Energia total disminueix — comptador reiniciat, re-baseline', {
         deviceId: device.device_id,
         deviceName: device.device_name,
         currentValue: current.value,
         previousTotal,
         currentTs: current.timestamp,
       });
-      return false;
+      energiaWh = 0;
+      potenciaW = 0;
+    } else {
+      energiaWh = Math.round((current.value - previousTotal) * 100) / 100;
+
+      // Power in W = Wh / hours elapsed between raw timestamps
+      const hoursElapsed = Math.abs(current.timestamp - previousRawTs) / (1000 * 60 * 60);
+      potenciaW = hoursElapsed > 0
+        ? Math.round((energiaWh / hoursElapsed) * 100) / 100
+        : 0;
     }
-
-    // Delta = consumed energy in Wh since last record
-    const energiaWh = Math.round((current.value - previousTotal) * 100) / 100;
-
-    // Power in W = Wh / hours elapsed between raw timestamps
-    const hoursElapsed = Math.abs(current.timestamp - previousRawTs) / (1000 * 60 * 60);
-    const potenciaW = hoursElapsed > 0
-      ? Math.round((energiaWh / hoursElapsed) * 100) / 100
-      : 0;
-
-    const energiaTotalWh = current.value;
 
     // Skip if record already exists for this device+timestamp
     const existing = await this.pool.query(

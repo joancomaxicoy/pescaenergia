@@ -73,10 +73,26 @@ function updateDashboard() {
             updateCharts(currentIntervals);
             updateSummary(result.summary);
             updateDeviceBreakdown(result.summary);
+            try {
+                renderSolarDonuts(result.summary);
+            } catch (err) {
+                console.error('Error renderitzant donuts solar/xarxa:', err);
+            }
         })
         .catch(function(err) {
             console.error('Error carregant dades:', err);
             showToast('Error carregant dades', 'error');
+        });
+
+    // Balanc energetic per 1/4 d'hora (evolucio)
+    fetch('/api/statistics/balance?' + params)
+        .then(function(res) { return res.json(); })
+        .then(function(result) {
+            renderBalanceChart(result.intervals || []);
+        })
+        .catch(function(err) {
+            console.error('Error carregant balanç:', err);
+            showToast('Error carregant balanç', 'error');
         });
 
     // Consum total KPI via /consumption (dades acumulades exactes)
@@ -140,6 +156,59 @@ function updateKPIs(summary) {
     document.getElementById('kpiSolarUsedSub').textContent = solarUsedPct + '% del consum total';
 }
 
+function renderSolarDonuts(summary) {
+    var totalConsumption = summary.totalConsumption || 0;
+    var totalGrid = summary.totalGrid || 0;
+    var totalExport = summary.totalExport || 0;
+    var solarUsed = Math.max(0, totalConsumption - totalGrid);
+
+    var donutOptions = function() {
+        return {
+            responsive: true,
+            maintainAspectRatio: true,
+            cutout: '62%',
+            plugins: { legend: { display: false } }
+        };
+    };
+
+    renderChart('solarMixChart', 'doughnut',
+        ['Energia Solar', 'Energia de Xarxa'],
+        [{
+            data: [Math.round(solarUsed * 100) / 100, Math.round(totalGrid * 100) / 100],
+            backgroundColor: ['#ffd93d', '#ff6b6b'],
+            borderWidth: 0
+        }],
+        donutOptions());
+
+    renderChart('generationUseChart', 'doughnut',
+        ['Solar aprofitada', 'Exportada a la xarxa'],
+        [{
+            data: [Math.round(solarUsed * 100) / 100, Math.round(totalExport * 100) / 100],
+            backgroundColor: ['#8bc34a', '#4a90d9'],
+            borderWidth: 0
+        }],
+        donutOptions());
+
+    setDonutLegend('solarMixLegend', [solarUsed, totalGrid], ['Energia Solar', 'Energia de Xarxa'], ['#ffd93d', '#ff6b6b']);
+    setDonutLegend('generationUseLegend', [solarUsed, totalExport], ['Solar aprofitada', 'Exportada a la xarxa'], ['#8bc34a', '#4a90d9']);
+}
+
+function setDonutLegend(elId, values, labels, colors) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    var total = values.reduce(function(a, b) { return a + b; }, 0);
+    var html = '';
+    values.forEach(function(v, i) {
+        var pct = total > 0 ? Math.round((v / total) * 100) : 0;
+        html += '<div class="stats-donut-legend-item">' +
+            '<span class="stats-donut-dot" style="background: ' + colors[i] + ';"></span>' +
+            '<span class="stats-donut-legend-label">' + labels[i] + '</span>' +
+            '<span class="stats-donut-legend-value">' + pct + '% (' + formatKwh(v) + ')</span>' +
+            '</div>';
+    });
+    el.innerHTML = html;
+}
+
 function updateCharts(intervals) {
     if (!intervals || intervals.length === 0) return;
 
@@ -185,74 +254,84 @@ function updateCharts(intervals) {
             y: { stacked: true, beginAtZero: true, title: { display: true, text: 'kWh' } }
         }
     });
+}
 
-    // 2. Solar vs Xarxa (line)
-    var solarDatasets = [];
+function renderBalanceChart(intervals) {
+    if (!intervals || intervals.length === 0) return;
 
-    if (selectedDevices.indexOf('solar') !== -1) {
-        solarDatasets.push({
-            label: 'Generacio Solar',
-            data: intervals.map(function(d) { return Math.round(d.solar * 10) / 10; }),
-            borderColor: '#ffd93d',
-            backgroundColor: 'rgba(255, 217, 61, 0.1)',
-            fill: true,
-            tension: 0.4
+    var labels = intervals.map(function(d) { return moment(d.date).format('DD/MM HH:mm'); });
+
+    // Unió de tots els aparells presents a qualsevol interval del període
+    var allTags = {};
+    intervals.forEach(function(d) {
+        Object.keys(d.devices || {}).forEach(function(t) { allTags[t] = true; });
+    });
+    var deviceTags = Object.keys(allTags).filter(function(t) {
+        return t !== 'total' && selectedDevices.indexOf(t) !== -1;
+    });
+
+    var balanceDatasets = [];
+
+    // Línia de consum per cada aparell seleccionat
+    deviceTags.forEach(function(tag) {
+        balanceDatasets.push({
+            label: DEVICE_NAMES[tag] || tag,
+            data: intervals.map(function(d) { return Math.round((d.devices[tag] || 0) * 10) / 10; }),
+            borderColor: DEVICE_COLORS[tag] || '#b0bec5',
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 1,
+            tension: 0.4,
+            pointRadius: 0
         });
-    }
+    });
 
+    // Línia de consum total
     if (selectedDevices.indexOf('total') !== -1) {
-        solarDatasets.push({
+        balanceDatasets.push({
             label: 'Consum Total',
             data: intervals.map(function(d) { return Math.round(d.consumption * 10) / 10; }),
             borderColor: '#1a1a2e',
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 1.5,
             borderDash: [5, 5],
-            fill: false,
-            tension: 0.4
-        });
-        solarDatasets.push({
-            label: 'Energia de Xarxa',
-            data: intervals.map(function(d) { return Math.round(d.grid * 10) / 10; }),
-            borderColor: '#ff6b6b',
-            backgroundColor: 'rgba(255, 107, 107, 0.1)',
-            fill: true,
-            tension: 0.4
+            tension: 0.4,
+            pointRadius: 0
         });
     }
 
-    renderChart('solarGridChart', 'line', labels, solarDatasets, {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: { legend: { position: 'top' } },
-        scales: { y: { beginAtZero: true, title: { display: true, text: 'kWh' } } }
-    });
-
-    // 3. Balanc (bar)
-    var balanceDatasets = [];
-
-    deviceTags.forEach(function(tag) {
-        balanceDatasets.push({
-            label: (DEVICE_NAMES[tag] || tag) + ' (consum)',
-            data: intervals.map(function(d) { return Math.round((d.devices[tag] || 0) * 10) / 10; }),
-            backgroundColor: DEVICE_COLORS[tag] || '#b0bec5',
-            borderWidth: 1
-        });
-    });
-
+    // Línia de generació solar
     if (selectedDevices.indexOf('solar') !== -1) {
         balanceDatasets.push({
             label: 'Generacio Solar',
-            data: intervals.map(function(d) { return -Math.round(d.solar * 10) / 10; }),
-            backgroundColor: 'rgba(255, 217, 61, 0.7)',
+            data: intervals.map(function(d) { return Math.round(d.solar * 10) / 10; }),
             borderColor: '#ffd93d',
-            borderWidth: 1
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 1.5,
+            tension: 0.4,
+            pointRadius: 0
         });
     }
 
-    renderChart('balanceChart', 'bar', labels, balanceDatasets, {
+    // Línia excedent / xarxa (positiu = excedent, negatiu = import de la xarxa)
+    balanceDatasets.push({
+        label: 'Excedent / Xarxa',
+        data: intervals.map(function(d) { return Math.round((d.export - d.grid) * 10) / 10; }),
+        borderColor: '#4a90d9',
+        backgroundColor: 'rgba(74,144,217,0.1)',
+        borderWidth: 1,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0
+    });
+
+    renderChart('balanceChart', 'line', labels, balanceDatasets, {
         responsive: true,
         maintainAspectRatio: true,
         plugins: { legend: { position: 'top' } },
-        scales: { y: { beginAtZero: true, title: { display: true, text: 'kWh' } } }
+        scales: {
+            x: { ticks: { autoSkip: true, maxRotation: 0, maxTicksLimit: 12 } },
+            y: { title: { display: true, text: 'kWh' } }
+        }
     });
 }
 
@@ -383,4 +462,21 @@ function showToast(message, type) {
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeEmailModal();
+});
+
+document.querySelectorAll('.kpi-info').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var popup = btn.querySelector('.kpi-info-popup');
+        if (!popup) return;
+        var isShow = popup.classList.contains('show');
+        document.querySelectorAll('.kpi-info-popup.show').forEach(function(p) { p.classList.remove('show'); });
+        if (!isShow) popup.classList.add('show');
+    });
+});
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.kpi-info')) {
+        document.querySelectorAll('.kpi-info-popup.show').forEach(function(p) { p.classList.remove('show'); });
+    }
 });

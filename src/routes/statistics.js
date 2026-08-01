@@ -244,6 +244,116 @@ router.get('/solar', asyncHandler(async (req, res) => {
   }
 }));
 
+router.get('/balance', asyncHandler(async (req, res) => {
+  try {
+    const { from, to, cups } = req.query;
+
+    if (!from || !cups) {
+      return res.status(400).json({
+        error: 'Calen els paràmetres from i cups',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const toDate = to || new Date().toISOString().slice(0, 10);
+    const fromTs = `${from} 00:00:00+00`;
+    const toTs = `${toDate} 23:59:59+00`;
+
+    // Map device_id → tag per aquest CUPS
+    const deviceMapResult = await database.query(
+      `SELECT d.id, d.shelly_device_id
+       FROM devices d
+       JOIN users u ON d.user_id = u.id::text
+       WHERE u.cups = $1`,
+      [cups]
+    );
+
+    const deviceTagMap = {};
+    for (const d of deviceMapResult.rows) {
+      const sid = d.shelly_device_id || '';
+      const parts = sid.split('/');
+      let tag;
+      if (parts.length === 1) tag = 'total';
+      else if (parts[0] === 'BombaDepuradora') tag = 'depuradora';
+      else if (parts[0] === 'BombaNet') tag = 'bombaNet';
+      else if (parts[0] === 'CloradorSali') tag = 'clorador';
+      else tag = parts[0].toLowerCase();
+      deviceTagMap[d.id] = tag;
+    }
+
+    const generatorScales = {
+      'giravolt': 100,
+      'sala-polivalent': 1000,
+      'residencia': 1000,
+    };
+
+    // Solar i consum total per interval (15 min) des de balanc_energetic
+    const balancResult = await database.query(
+      `SELECT timestamp, generator_code, allocated_wh, consumption_wh
+       FROM balanc_energetic
+       WHERE cups = $1 AND timestamp >= $2 AND timestamp <= $3`,
+      [cups, fromTs, toTs]
+    );
+
+    // Consum per aparell per interval (15 min) des de consums
+    const consumTsResult = await database.query(
+      `SELECT timestamp, device_id, energia_wh
+       FROM consums
+       WHERE cups = $1 AND timestamp >= $2 AND timestamp <= $3`,
+      [cups, fromTs, toTs]
+    );
+
+    const byTs = {};
+    for (const row of balancResult.rows) {
+      const key = row.timestamp.toISOString();
+      if (!byTs[key]) byTs[key] = { solar: 0, consumption: null, devices: {} };
+      const scale = generatorScales[row.generator_code] || 1;
+      byTs[key].solar += parseFloat(row.allocated_wh) * scale;
+      byTs[key].consumption = parseFloat(row.consumption_wh);
+    }
+
+    for (const row of consumTsResult.rows) {
+      const key = row.timestamp.toISOString();
+      if (!byTs[key]) byTs[key] = { solar: 0, consumption: null, devices: {} };
+      const tag = deviceTagMap[row.device_id] || 'unknown';
+      byTs[key].devices[tag] = (byTs[key].devices[tag] || 0) + parseFloat(row.energia_wh);
+    }
+
+    const intervals = Object.keys(byTs).sort().map((key) => {
+      const d = byTs[key];
+      let consumption = d.consumption;
+      if (consumption === null) {
+        consumption = d.devices.total || Object.values(d.devices).reduce((s, v) => s + v, 0);
+      }
+      const solar = d.solar;
+      return {
+        date: key,
+        consumption: Math.round(consumption * 100) / 100,
+        solar: Math.round(solar * 100) / 100,
+        grid: Math.round(Math.max(0, consumption - solar) * 100) / 100,
+        export: Math.round(Math.max(0, solar - consumption) * 100) / 100,
+        devices: Object.fromEntries(
+          Object.entries(d.devices).map(([t, v]) => [t, Math.round(v * 100) / 100])
+        )
+      };
+    });
+
+    res.json({
+      period: { from, to: toDate },
+      cups,
+      intervals,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error obtenint balanç per intervals:', { error: error.message });
+    res.status(500).json({
+      error: 'Error consultant balanç',
+      details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+      timestamp: new Date().toISOString()
+    });
+  }
+}));
+
 router.get('/data', asyncHandler(async (req, res) => {
   try {
     const { from, to, cups } = req.query;
@@ -301,7 +411,8 @@ router.get('/data', asyncHandler(async (req, res) => {
 
     // Consum per device per dia = MAX(energia_total_wh) del dia - baseline (evita drops i acumulats)
     const consumResult = await database.query(
-      `SELECT DATE(c.timestamp) as day, c.device_id, MAX(c.energia_total_wh) as max_total
+      `SELECT DATE(c.timestamp) as day, c.device_id,
+              MAX(c.energia_total_wh) as max_total, MIN(c.energia_total_wh) as min_total
        FROM consums c
        WHERE c.cups = $1 AND c.timestamp >= $2 AND c.timestamp <= $3
        GROUP BY DATE(c.timestamp), c.device_id
@@ -424,17 +535,25 @@ router.get('/data', asyncHandler(async (req, res) => {
       const deviceId = c.device_id;
       const tag = deviceTagMap[deviceId] || 'unknown';
       const maxTotal = parseFloat(c.max_total);
+      const minTotal = parseFloat(c.min_total);
 
       let wh = 0;
-      if (deviceBaselines[deviceId] !== undefined) {
-        wh = Math.max(0, maxTotal - deviceBaselines[deviceId]);
+      const baseline = deviceBaselines[deviceId];
+      if (baseline !== undefined) {
+        if (maxTotal < baseline) {
+          // El comptador s'ha reiniciat (tot el dia queda per sota del baseline):
+          // re-baseline a la lectura mínima del dia i comptem només el moviment d'avui.
+          deviceBaselines[deviceId] = minTotal;
+          wh = Math.max(0, maxTotal - minTotal);
+        } else {
+          wh = Math.max(0, maxTotal - baseline);
+          // Actualitzar baseline amb el màxim del dia (un drop transitori no reinicia el comptador)
+          deviceBaselines[deviceId] = Math.max(baseline, maxTotal);
+        }
       }
 
       if (!deviceTotals[tag]) deviceTotals[tag] = {};
       deviceTotals[tag][day] = (deviceTotals[tag][day] || 0) + wh;
-
-      // Actualitzar baseline amb el màxim del dia (un drop no reinicia el comptador)
-      deviceBaselines[deviceId] = Math.max(deviceBaselines[deviceId] || 0, maxTotal);
     }
 
     // Construir intervals diaris

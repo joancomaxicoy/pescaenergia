@@ -63,32 +63,68 @@
     <!-- KPIs -->
     <div class="stats-kpi-grid" id="kpiGrid">
         <div class="stats-kpi-card">
-            <div class="stats-kpi-label">Consum Total</div>
+            <div class="stats-kpi-label">
+                Consum Total
+                <button type="button" class="kpi-info" aria-label="Mes informacio sobre el consum total">
+                    <span class="kpi-info-icon">i</span>
+                    <span class="kpi-info-popup">Total d'energia electrica consumida durant el periode seleccionat (en kWh), mesurada pel comptador principal (Shelly EM) de la instal·lacio. Els dos valors petits de sota mostren la lectura del comptador a l'inici i al final del periode.</span>
+                </button>
+            </div>
             <div class="stats-kpi-value" id="kpiConsumption" style="color: #1a1a2e;">--</div>
             <div class="stats-kpi-sub" id="kpiConsumptionSub"></div>
         </div>
         <div class="stats-kpi-card">
-            <div class="stats-kpi-label">Generacio Solar</div>
+            <div class="stats-kpi-label">
+                Generacio Solar
+                <button type="button" class="kpi-info" aria-label="Mes informacio sobre la generacio solar">
+                    <span class="kpi-info-icon">i</span>
+                    <span class="kpi-info-popup">Total d'energia generada pels panells solars durant el periode seleccionat (en kWh). Els dos valors petits de sota mostren la lectura acumulada del generador a l'inici i al final del periode.</span>
+                </button>
+            </div>
             <div class="stats-kpi-value" id="kpiSolar" style="color: #ffd93d;">--</div>
             <div class="stats-kpi-sub" id="kpiSolarSub"></div>
         </div>
         <div class="stats-kpi-card">
-            <div class="stats-kpi-label">Solar Aprofitada</div>
+            <div class="stats-kpi-label">
+                Solar Aprofitada
+                <button type="button" class="kpi-info" aria-label="Mes informacio sobre la solar aprofitada">
+                    <span class="kpi-info-icon">i</span>
+                    <span class="kpi-info-popup">Energia solar que s'ha consumit directament a la instal·lacio, sense passar per la xarxa (en kWh). El valor petit de sota mostra el percentatge que representa sobre el consum total.</span>
+                </button>
+            </div>
             <div class="stats-kpi-value" id="kpiSolarUsed" style="color: #8bc34a;">--</div>
             <div class="stats-kpi-sub" id="kpiSolarUsedSub"></div>
         </div>
         <div class="stats-kpi-card">
-            <div class="stats-kpi-label">Energia de Xarxa</div>
+            <div class="stats-kpi-label">
+                Energia de Xarxa
+                <button type="button" class="kpi-info" aria-label="Mes informacio sobre l'energia de xarxa">
+                    <span class="kpi-info-icon">i</span>
+                    <span class="kpi-info-popup">Energia electrica importada de la xarxa durant el periode seleccionat (en kWh). El valor petit de sota mostra el percentatge que representa sobre el consum total.</span>
+                </button>
+            </div>
             <div class="stats-kpi-value" id="kpiGrid_" style="color: #ff6b6b;">--</div>
             <div class="stats-kpi-sub" id="kpiGridSub"></div>
         </div>
         <div class="stats-kpi-card">
-            <div class="stats-kpi-label">Exportacio a la Xarxa</div>
+            <div class="stats-kpi-label">
+                Exportacio a la Xarxa
+                <button type="button" class="kpi-info" aria-label="Mes informacio sobre l'exportacio a la xarxa">
+                    <span class="kpi-info-icon">i</span>
+                    <span class="kpi-info-popup">Excedent d'energia solar que s'ha abocat a la xarxa durant el periode seleccionat (en kWh). El valor petit de sota mostra el percentatge que representa sobre la generacio total.</span>
+                </button>
+            </div>
             <div class="stats-kpi-value" id="kpiExport" style="color: #4a90d9;">--</div>
             <div class="stats-kpi-sub" id="kpiExportSub"></div>
         </div>
         <div class="stats-kpi-card">
-            <div class="stats-kpi-label">Aprofitament Solar</div>
+            <div class="stats-kpi-label">
+                Aprofitament Solar
+                <button type="button" class="kpi-info" aria-label="Mes informacio sobre l'aprofitament solar">
+                    <span class="kpi-info-icon">i</span>
+                    <span class="kpi-info-popup">Percentatge de la generacio solar que s'aprofita directament (energia solar aprofitada / generacio total). El valor petit de sota mostra els kg de CO2 estalviats durant el periode.</span>
+                </button>
+            </div>
             <div class="stats-kpi-value" id="kpiSelfConsumption" style="color: #4ecdc4;">--</div>
             <div class="stats-kpi-sub" id="kpiSelfConsumptionSub"></div>
         </div>
@@ -101,11 +137,22 @@
             <canvas id="consumptionChart"></canvas>
         </div>
         <div class="stats-chart-container">
-            <h3>Solar vs Xarxa</h3>
-            <canvas id="solarGridChart"></canvas>
+            <h3>Resum Solar i Xarxa</h3>
+            <div class="stats-donuts">
+                <div class="stats-donut">
+                    <h4>Origen del consum</h4>
+                    <canvas id="solarMixChart"></canvas>
+                    <div class="stats-donut-legend" id="solarMixLegend"></div>
+                </div>
+                <div class="stats-donut">
+                    <h4>Us de la generacio</h4>
+                    <canvas id="generationUseChart"></canvas>
+                    <div class="stats-donut-legend" id="generationUseLegend"></div>
+                </div>
+            </div>
         </div>
         <div class="stats-chart-container stats-chart-full">
-            <h3>Balanc energetic per aparell</h3>
+            <h3>Balanc energetic</h3>
             <canvas id="balanceChart"></canvas>
         </div>
     </div>

@@ -215,6 +215,7 @@
 }
 
 .stats-kpi-card {
+    position: relative;
     background: white;
     border-radius: 12px;
     padding: 20px;
@@ -232,6 +233,65 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 6px;
+}
+
+.kpi-info {
+    position: static;
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    vertical-align: middle;
+    font: inherit;
+    outline: none;
+}
+
+.kpi-info-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #b0bec5;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    font-style: normal;
+}
+
+.kpi-info:hover .kpi-info-icon,
+.kpi-info:focus-visible .kpi-info-icon {
+    background: #4a90d9;
+}
+
+.kpi-info-popup {
+    display: none;
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 240px;
+    max-width: calc(100% - 28px);
+    background: #2d3436;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 10px 12px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    z-index: 30;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+}
+
+.stats-kpi-card:hover .kpi-info-popup,
+.kpi-info:focus-within .kpi-info-popup,
+.kpi-info-popup.show {
+    display: block;
 }
 
 .stats-kpi-value {
@@ -268,6 +328,61 @@
 
 .stats-chart-container canvas {
     max-height: 280px;
+}
+
+.stats-donuts {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.stats-donut {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+}
+
+.stats-donut h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+.stats-donut canvas {
+    max-height: 170px;
+}
+
+.stats-donut-legend {
+    margin-top: 10px;
+    text-align: left;
+}
+
+.stats-donut-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #555;
+    padding: 2px 0;
+}
+
+.stats-donut-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.stats-donut-legend-label {
+    flex: 1;
+}
+
+.stats-donut-legend-value {
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
 }
 
 .stats-chart-full {
@@ -450,6 +565,9 @@
 }
 
 @media (max-width: 768px) {
+    .stats-donuts {
+        flex-direction: column;
+    }
     .stats-filters-grid {
         grid-template-columns: 1fr;
     }
