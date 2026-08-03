@@ -1,4 +1,5 @@
 const logger = require('../../utils/logger');
+const database = require('../../utils/database');
 const DeviceStateService = require('./deviceStateService');
 const { classifyMetric, getDeviceTypeFromTopic } = require('../../config/device-metrics-config');
 
@@ -25,11 +26,17 @@ class CompactorService {
       totalCycleTime: 0,
       errors: 0,
       lastError: null,
+      filteredSamples: 0,
       startTime: Date.now()
     };
     
     // Configuración de agregados
     this.aggregationTypes = ['avg', 'min', 'max', 'sum', 'count'];
+    
+    // Running max per comptadors acumulatius (deviceUuid|metricName -> value)
+    // Els comptadors acumulatius mai han de baixar: qualsevol mostra per sota
+    // del màxim ja conegut es considera esporàdica i es descarta.
+    this.counterRunningMax = new Map();
   }
 
   /**
@@ -240,6 +247,18 @@ class CompactorService {
     const firstMetric = metrics[0];
     const deviceType = firstMetric.deviceType;
     
+    // Seedejar el running max dels comptadors acumulatius d'aquest dispositiu
+    // (una sola consulta per comptador, la primera vegada que es veu)
+    const counterMetrics = new Set();
+    for (const metric of metrics) {
+      if (this.isCumulativeCounter(metric.metricName)) {
+        counterMetrics.add(metric.metricName);
+      }
+    }
+    for (const metricName of counterMetrics) {
+      await this.getCounterRunningMax(deviceUuid, metricName);
+    }
+    
     // Separar métricas por tipo de persistencia
     const timeSeriesMetrics = new Map();
     const stateMetrics = [];
@@ -262,6 +281,26 @@ class CompactorService {
               type: typeof value 
             });
             continue;
+          }
+
+          // Els comptadors acumulatius mai han de baixar: descartar qualsevol
+          // mostra per sota del màxim ja conegut (sense finestra temporal).
+          if (this.isCumulativeCounter(metricName)) {
+            const counterKey = `${deviceUuid}|${metricName}`;
+            const runningMax = this.counterRunningMax.get(counterKey);
+            if (runningMax !== null && runningMax !== undefined && value < runningMax) {
+              this.stats.filteredSamples++;
+              logger.debug('Mostra per sota del running max descartada', {
+                deviceUuid,
+                metricName,
+                value,
+                runningMax
+              });
+              continue;
+            }
+            if (runningMax === null || runningMax === undefined || value > runningMax) {
+              this.counterRunningMax.set(counterKey, value);
+            }
           }
 
           if (!timeSeriesMetrics.has(metricName)) {
@@ -300,6 +339,26 @@ class CompactorService {
           
           // Tratar como serie temporal por defecto si es numérica
           if (typeof value === 'number' && !isNaN(value)) {
+            // Els comptadors acumulatius mai han de baixar: mateix filtre
+            // que al cas 'timeseries' (cobreix mètriques fora de config).
+            if (this.isCumulativeCounter(metricName)) {
+              const counterKey = `${deviceUuid}|${metricName}`;
+              const runningMax = this.counterRunningMax.get(counterKey);
+              if (runningMax !== null && runningMax !== undefined && value < runningMax) {
+                this.stats.filteredSamples++;
+                logger.debug('Mostra per sota del running max descartada (unknown)', {
+                  deviceUuid,
+                  metricName,
+                  value,
+                  runningMax
+                });
+                continue;
+              }
+              if (runningMax === null || runningMax === undefined || value > runningMax) {
+                this.counterRunningMax.set(counterKey, value);
+              }
+            }
+
             if (!timeSeriesMetrics.has(metricName)) {
               timeSeriesMetrics.set(metricName, {
                 values: [],
@@ -531,10 +590,61 @@ class CompactorService {
       totalCycleTime: 0,
       errors: 0,
       lastError: null,
+      filteredSamples: 0,
       startTime: Date.now()
     };
     
     logger.info('Estadísticas del compactador reseteadas');
+  }
+
+  /**
+   * Determina si una métrica és un comptador acumulatiu (monotònic).
+   * Els comptadors acumulatius mai han de baixar; les métriques diàries
+   * (que es reinicien cada dia) queden excloses del filtre.
+   * @param {string} metricName - Nom de la métrica
+   * @returns {boolean}
+   */
+  isCumulativeCounter(metricName) {
+    if (!metricName) return false;
+    if (metricName.includes('dia')) return false;
+    return metricName.includes('_total') || metricName.includes('aenergy_total');
+  }
+
+  /**
+   * Obté (i cacheja) el running max conegut per a un comptador acumulatiu.
+   * Sembra amb l'última mostra _max persistida per evitar rebaixar el
+   * llindar després d'un reinici del procés.
+   * @param {string} deviceUuid - UUID del dispositiu
+   * @param {string} metricName - Nom de la métrica
+   * @returns {Promise<number|null>}
+   */
+  async getCounterRunningMax(deviceUuid, metricName) {
+    const key = `${deviceUuid}|${metricName}`;
+    if (this.counterRunningMax.has(key)) {
+      return this.counterRunningMax.get(key);
+    }
+
+    let seeded = null;
+    try {
+      const result = await database.query(
+        `SELECT value FROM energy_metrics
+         WHERE device_id = $1 AND metric_name = $2
+         ORDER BY timestamp DESC LIMIT 1`,
+        [deviceUuid, `${metricName}_max`]
+      );
+      if (result.rows.length > 0) {
+        seeded = parseFloat(result.rows[0].value);
+      }
+    } catch (error) {
+      logger.error('Error sembrant running max del comptador', {
+        deviceUuid,
+        metricName,
+        error: error.message
+      });
+    }
+
+    this.counterRunningMax.set(key, seeded);
+    return seeded;
   }
 
   /**
