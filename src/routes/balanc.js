@@ -295,6 +295,15 @@ router.get('/dia-tipic', asyncHandler(async (req, res) => {
         generationWh: Math.round(typicalGeneration * 100) / 100,
         importWh: Math.round(typicalImport * 100) / 100,
         exportWh: Math.round(typicalExport * 100) / 100,
+        autoconsumConsPct: typicalConsumption > 0
+          ? Math.round(((typicalConsumption - typicalImport) / typicalConsumption) * 1000) / 10
+          : 0,
+        autoconsumGenPct: typicalGeneration > 0
+          ? Math.round(((typicalGeneration - typicalExport) / typicalGeneration) * 1000) / 10
+          : 0,
+        exportPct: typicalGeneration > 0
+          ? Math.round((typicalExport / typicalGeneration) * 1000) / 10
+          : 0,
       },
       battery,
       timestamp: new Date().toISOString(),

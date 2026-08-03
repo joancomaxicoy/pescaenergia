@@ -74,6 +74,13 @@
     }
   }
 
+  function renderDayAutoconsum(typicalDay) {
+    if (!typicalDay) return;
+    setKpi('kpiDayAutoconsumCons', (typicalDay.autoconsumConsPct !== undefined ? typicalDay.autoconsumConsPct : 0) + '%');
+    setKpi('kpiDayAutoconsumGen', (typicalDay.autoconsumGenPct !== undefined ? typicalDay.autoconsumGenPct : 0) + '%');
+    setKpi('kpiDayExportPct', (typicalDay.exportPct !== undefined ? typicalDay.exportPct : 0) + '%');
+  }
+
   function renderBatterySummary(battery) {
     if (!battery || !battery.summary) return;
     var s = battery.summary;
@@ -303,6 +310,7 @@
         setKpi('simLoading', '');
         renderParticipation(data.participation);
         renderTotals(data.totals, data.typicalDay);
+        renderDayAutoconsum(data.typicalDay);
         renderProfileCharts(data.profile);
         renderBatterySummary(data.battery);
         renderBatteryChart(data.profile, data.battery);
