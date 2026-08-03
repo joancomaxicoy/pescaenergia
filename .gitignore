@@ -60,3 +60,7 @@ xuleta.txt
 
 .env
 .env.local
+
+# logs i backups de runtime
+logs/
+backups/
