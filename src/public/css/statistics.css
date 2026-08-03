@@ -354,6 +354,37 @@
     max-height: 170px;
 }
 
+.stats-donut-wrap {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.stats-donut-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    line-height: 1.2;
+}
+
+.stats-donut-center-value {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a1a2e;
+    white-space: nowrap;
+}
+
+.stats-donut-center-label {
+    display: block;
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+}
+
 .stats-donut-legend {
     margin-top: 10px;
     text-align: left;

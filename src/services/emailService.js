@@ -222,6 +222,36 @@ class EmailService {
     }
   }
 
+  async sendReportEmail(to, { subject, text, html, attachments } = {}) {
+    await this.ensureInitialized();
+
+    try {
+      const mailOptions = {
+        from: {
+          name: 'PescaEnergia',
+          address: process.env.SMTP_USER
+        },
+        to,
+        subject: subject || 'Informe energètic - PescaEnergia',
+        text: text || 'Tens adjunt l\'informe energètic sol·licitat.',
+        html: html || '<h1>Informe energètic</h1><p>Tens adjunt l\'informe energètic sol·licitat.</p>',
+        attachments: attachments || []
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      logger.info('Email amb informe enviat', {
+        email: to,
+        messageId: result.messageId,
+        attachments: (attachments || []).length
+      });
+
+      return result;
+    } catch (error) {
+      logger.error('Error enviant email amb informe:', error);
+      throw error;
+    }
+  }
+
   async sendTestEmail(to) {
     await this.ensureInitialized();
 

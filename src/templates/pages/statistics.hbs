@@ -1,6 +1,6 @@
 <link rel="stylesheet" href="/css/statistics.css">
 
-<div class="stats-container" id="statsContainer" data-cups="{{user.cups}}">
+<div class="stats-container" id="statsContainer" data-cups="{{user.cups}}" data-name="{{user.name}}" data-email="{{user.email}}">
     <!-- Header -->
     <div class="stats-header">
         <div>
@@ -141,25 +141,37 @@
             <div class="stats-donuts">
                 <div class="stats-donut">
                     <h4>Origen del consum</h4>
-                    <canvas id="solarMixChart"></canvas>
+                    <div class="stats-donut-wrap">
+                        <canvas id="solarMixChart"></canvas>
+                        <div class="stats-donut-center">
+                            <span class="stats-donut-center-value" id="solarMixCenterValue">--</span>
+                            <span class="stats-donut-center-label">Consum total</span>
+                        </div>
+                    </div>
                     <div class="stats-donut-legend" id="solarMixLegend"></div>
                 </div>
                 <div class="stats-donut">
                     <h4>Us de la generacio</h4>
-                    <canvas id="generationUseChart"></canvas>
+                    <div class="stats-donut-wrap">
+                        <canvas id="generationUseChart"></canvas>
+                        <div class="stats-donut-center">
+                            <span class="stats-donut-center-value" id="generationUseCenterValue">--</span>
+                            <span class="stats-donut-center-label">Generacio total</span>
+                        </div>
+                    </div>
                     <div class="stats-donut-legend" id="generationUseLegend"></div>
                 </div>
             </div>
         </div>
         <div class="stats-chart-container stats-chart-full">
-            <h3>Balanc energetic</h3>
+            <h3>Balanç energètic</h3>
             <canvas id="balanceChart"></canvas>
         </div>
     </div>
 
     <!-- Summary -->
     <div class="stats-summary-section">
-        <h3>Resum del periode</h3>
+        <h3>Resum del període</h3>
         <div class="stats-summary-grid">
             <div>
                 <div class="stats-summary-item">
@@ -167,42 +179,86 @@
                     <span class="stats-summary-value" id="sumConsumption">--</span>
                 </div>
                 <div class="stats-summary-item">
-                    <span class="stats-summary-label">Generacio solar</span>
-                    <span class="stats-summary-value" id="sumSolar">--</span>
-                </div>
-                <div class="stats-summary-item">
                     <span class="stats-summary-label">Energia de xarxa</span>
                     <span class="stats-summary-value" id="sumGrid">--</span>
                 </div>
                 <div class="stats-summary-item">
-                    <span class="stats-summary-label">Exportacio a la xarxa</span>
-                    <span class="stats-summary-value" id="sumExport" style="color: #4a90d9;">--</span>
-                </div>
-                <div class="stats-summary-item">
-                    <span class="stats-summary-label">Autoconsum solar</span>
-                    <span class="stats-summary-value" id="sumSelfConsumption">--</span>
-                </div>
-                <div class="stats-summary-item">
-                    <span class="stats-summary-label">Solar aprofitada</span>
+                    <span class="stats-summary-label">Energia del sol</span>
                     <span class="stats-summary-value" id="sumSolarUsed" style="color: #8bc34a;">--</span>
                 </div>
-            </div>
-            <div>
                 <div class="stats-summary-item">
-                    <span class="stats-summary-label">CO2 estalviat</span>
-                    <span class="stats-summary-value" id="sumCo2">--</span>
-                </div>
-                <div class="stats-summary-item">
-                    <span class="stats-summary-label">Estalvi economic</span>
-                    <span class="stats-summary-value" id="sumSaving" style="color: #2e7d32;">--</span>
+                    <span class="stats-summary-label">Percentatge d'autoconsum solar</span>
+                    <span class="stats-summary-value" id="sumSelfConsumption">--</span>
                 </div>
                 <div class="stats-summary-item">
                     <span class="stats-summary-label">Dies analitzats</span>
                     <span class="stats-summary-value" id="sumDays">--</span>
                 </div>
+            </div>
+            <div>
                 <div class="stats-summary-item">
-                    <span class="stats-summary-label">Mitjana diaria</span>
-                    <span class="stats-summary-value" id="sumAvg">--</span>
+                    <span class="stats-summary-label">Generació solar</span>
+                    <span class="stats-summary-value" id="sumSolar">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Energia aprofitada</span>
+                    <span class="stats-summary-value" id="sumSolarAprofitada">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Excedent energètic</span>
+                    <span class="stats-summary-value" id="sumExport" style="color: #4a90d9;">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Percentatge de solar aprofitada</span>
+                    <span class="stats-summary-value" id="sumSolarUsedPct">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Estalvi de CO2</span>
+                    <span class="stats-summary-value" id="sumCo2">--</span>
+                </div>
+            </div>
+        </div>
+
+        <h3>Mitjana diària</h3>
+        <div class="stats-summary-grid">
+            <div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Consum mitjà diari</span>
+                    <span class="stats-summary-value" id="avgConsumption">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Energia de xarxa diària</span>
+                    <span class="stats-summary-value" id="avgGrid">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Energia del sol diària</span>
+                    <span class="stats-summary-value" id="avgSolarUsed" style="color: #8bc34a;">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Percentatge d'autoconsum solar</span>
+                    <span class="stats-summary-value" id="avgSelfConsumption">--</span>
+                </div>
+            </div>
+            <div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Generació solar diària</span>
+                    <span class="stats-summary-value" id="avgSolar">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Energia aprofitada diària</span>
+                    <span class="stats-summary-value" id="avgSolarAprofitada">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Excedent energètic diari</span>
+                    <span class="stats-summary-value" id="avgExport" style="color: #4a90d9;">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Percentatge de solar aprofitada</span>
+                    <span class="stats-summary-value" id="avgSolarUsedPct">--</span>
+                </div>
+                <div class="stats-summary-item">
+                    <span class="stats-summary-label">Estalvi de CO2 diari</span>
+                    <span class="stats-summary-value" id="avgCo2">--</span>
                 </div>
             </div>
         </div>

@@ -158,39 +158,52 @@ function updateKPIs(summary) {
 
 function renderSolarDonuts(summary) {
     var totalConsumption = summary.totalConsumption || 0;
+    var totalSolar = summary.totalSolar || 0;
     var totalGrid = summary.totalGrid || 0;
     var totalExport = summary.totalExport || 0;
     var solarUsed = Math.max(0, totalConsumption - totalGrid);
+    var solarSelfConsumed = Math.max(0, totalSolar - totalExport);
 
-    var donutOptions = function() {
-        return {
-            responsive: true,
-            maintainAspectRatio: true,
-            cutout: '62%',
-            plugins: { legend: { display: false } }
-        };
+    var donutOptions = {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '62%',
+        plugins: { legend: { display: false } }
     };
 
-    renderChart('solarMixChart', 'doughnut',
-        ['Energia Solar', 'Energia de Xarxa'],
-        [{
-            data: [Math.round(solarUsed * 100) / 100, Math.round(totalGrid * 100) / 100],
-            backgroundColor: ['#ffd93d', '#ff6b6b'],
-            borderWidth: 0
-        }],
-        donutOptions());
+    try {
+        renderChart('solarMixChart', 'doughnut',
+            ['Energia Solar', 'Energia de Xarxa'],
+            [{
+                data: [Math.round(solarUsed * 100) / 100, Math.round(totalGrid * 100) / 100],
+                backgroundColor: ['#ffd93d', '#ff6b6b'],
+                borderWidth: 0
+            }],
+            donutOptions);
+    } catch (err) {
+        console.error('Error donut origen consum:', err);
+    }
 
-    renderChart('generationUseChart', 'doughnut',
-        ['Solar aprofitada', 'Exportada a la xarxa'],
-        [{
-            data: [Math.round(solarUsed * 100) / 100, Math.round(totalExport * 100) / 100],
-            backgroundColor: ['#8bc34a', '#4a90d9'],
-            borderWidth: 0
-        }],
-        donutOptions());
+    try {
+        renderChart('generationUseChart', 'doughnut',
+            ['Solar aprofitada', 'Exportada a la xarxa'],
+            [{
+                data: [Math.round(solarSelfConsumed * 100) / 100, Math.round(totalExport * 100) / 100],
+                backgroundColor: ['#8bc34a', '#4a90d9'],
+                borderWidth: 0
+            }],
+            donutOptions);
+    } catch (err) {
+        console.error('Error donut us generacio:', err);
+    }
 
     setDonutLegend('solarMixLegend', [solarUsed, totalGrid], ['Energia Solar', 'Energia de Xarxa'], ['#ffd93d', '#ff6b6b']);
-    setDonutLegend('generationUseLegend', [solarUsed, totalExport], ['Solar aprofitada', 'Exportada a la xarxa'], ['#8bc34a', '#4a90d9']);
+    setDonutLegend('generationUseLegend', [solarSelfConsumed, totalExport], ['Solar aprofitada', 'Exportada a la xarxa'], ['#8bc34a', '#4a90d9']);
+
+    var mixCenter = document.getElementById('solarMixCenterValue');
+    if (mixCenter) mixCenter.textContent = formatKwh(totalConsumption);
+    var genCenter = document.getElementById('generationUseCenterValue');
+    if (genCenter) genCenter.textContent = formatKwh(totalSolar);
 }
 
 function setDonutLegend(elId, values, labels, colors) {
@@ -251,7 +264,7 @@ function updateCharts(intervals) {
         plugins: { legend: { position: 'top' } },
         scales: {
             x: { stacked: true },
-            y: { stacked: true, beginAtZero: true, title: { display: true, text: 'kWh' } }
+            y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Wh' } }
         }
     });
 }
@@ -330,7 +343,7 @@ function renderBalanceChart(intervals) {
         plugins: { legend: { position: 'top' } },
         scales: {
             x: { ticks: { autoSkip: true, maxRotation: 0, maxTicksLimit: 12 } },
-            y: { title: { display: true, text: 'kWh' } }
+            y: { title: { display: true, text: 'Wh' } }
         }
     });
 }
@@ -351,18 +364,36 @@ function renderChart(canvasId, type, labels, datasets, options) {
 }
 
 function updateSummary(summary) {
+    var solarUsed = Math.max(0, (summary.totalConsumption || 0) - (summary.totalGrid || 0));
+    var days = summary.daysAnalyzed || 1;
+    var div = function(v) { return days > 0 ? v / days : 0; };
+    var selfConsPct = summary.totalConsumption > 0
+        ? Math.round((solarUsed / summary.totalConsumption) * 100)
+        : 0;
+    var solarUsedPct = summary.totalSolar > 0
+        ? Math.round((solarUsed / summary.totalSolar) * 100)
+        : 0;
+
     document.getElementById('sumConsumption').textContent = formatKwh(summary.totalConsumption);
-    document.getElementById('sumSolar').textContent = formatKwh(summary.totalSolar);
     document.getElementById('sumGrid').textContent = formatKwh(summary.totalGrid);
+    document.getElementById('sumSolarUsed').textContent = formatKwh(solarUsed);
+    document.getElementById('sumSelfConsumption').textContent = selfConsPct + '%';
+    document.getElementById('sumSolar').textContent = formatKwh(summary.totalSolar);
+    document.getElementById('sumSolarAprofitada').textContent = formatKwh(solarUsed);
     document.getElementById('sumExport').textContent = formatKwh(summary.totalExport);
-    document.getElementById('sumSelfConsumption').textContent = (summary.totalSolar > 0
-        ? Math.round((Math.max(0, (summary.totalConsumption || 0) - (summary.totalGrid || 0)) / summary.totalSolar) * 100)
-        : 0) + '%';
-    document.getElementById('sumSolarUsed').textContent = formatKwh(Math.max(0, (summary.totalConsumption || 0) - (summary.totalGrid || 0)));
+    document.getElementById('sumSolarUsedPct').textContent = solarUsedPct + '%';
     document.getElementById('sumCo2').textContent = '~' + (summary.co2Saved || 0) + ' kg';
-    document.getElementById('sumSaving').textContent = '~' + (summary.economicSaving || 0) + ' EUR';
     document.getElementById('sumDays').textContent = (summary.daysAnalyzed || 0) + ' dies';
-    document.getElementById('sumAvg').textContent = (summary.avgDaily || 0) + ' kWh/dia';
+
+    document.getElementById('avgConsumption').textContent = formatKwhPerDay(div(summary.totalConsumption));
+    document.getElementById('avgGrid').textContent = formatKwhPerDay(div(summary.totalGrid));
+    document.getElementById('avgSolarUsed').textContent = formatKwhPerDay(div(solarUsed));
+    document.getElementById('avgSelfConsumption').textContent = selfConsPct + '%';
+    document.getElementById('avgSolar').textContent = formatKwhPerDay(div(summary.totalSolar));
+    document.getElementById('avgSolarAprofitada').textContent = formatKwhPerDay(div(solarUsed));
+    document.getElementById('avgExport').textContent = formatKwhPerDay(div(summary.totalExport));
+    document.getElementById('avgSolarUsedPct').textContent = solarUsedPct + '%';
+    document.getElementById('avgCo2').textContent = '~' + (div(summary.co2Saved || 0).toFixed(1)) + ' kg/dia';
 }
 
 function updateDeviceBreakdown(summary) {
@@ -422,14 +453,58 @@ function formatKwh(wh) {
     return kwh.toFixed(1) + ' kWh';
 }
 
+function formatKwhPerDay(wh) {
+    var s = formatKwh(wh);
+    return s === '--' ? s : s + '/dia';
+}
+
 function generatePDF() {
+    var from = document.getElementById('dateFrom').value;
+    var to = document.getElementById('dateTo').value;
+    var container = document.getElementById('statsContainer');
+    var cups = container.dataset.cups;
+    var name = container.dataset.name || '';
+
     showToast('Generant PDF...', 'info');
-    setTimeout(function() {
-        showToast('PDF generat correctament!', 'success');
-    }, 1500);
+    fetch('/api/statistics/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: from, to: to, cups: cups, name: name })
+    })
+        .then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.blob();
+        })
+        .then(function(blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'informe-energetic-' + from.replace(/-/g, '') + '-' + to.replace(/-/g, '') + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('PDF generat correctament!', 'success');
+        })
+        .catch(function(err) {
+            console.error('Error generant PDF:', err);
+            showToast('Error generant el PDF', 'error');
+        });
 }
 
 function showEmailModal() {
+    var container = document.getElementById('statsContainer');
+    var userEmail = (container && container.dataset.email) || '';
+    var emailInput = document.getElementById('emailInput');
+    var messageInput = document.getElementById('emailMessage');
+
+    if (emailInput && !emailInput.value) {
+        emailInput.value = userEmail;
+    }
+    if (messageInput && !messageInput.value) {
+        messageInput.value = 'PescaEnergia t\'envia l\'informe sol·licitat.';
+    }
+
     document.getElementById('emailModal').classList.add('show');
 }
 
@@ -443,11 +518,37 @@ function sendEmail() {
         showToast('Si us plau, introdueix un email', 'error');
         return;
     }
+    var message = document.getElementById('emailMessage').value;
+    var from = document.getElementById('dateFrom').value;
+    var to = document.getElementById('dateTo').value;
+    var container = document.getElementById('statsContainer');
+    var cups = container.dataset.cups;
+    var name = container.dataset.name || '';
+
     closeEmailModal();
     showToast('Enviant informe per email...', 'info');
-    setTimeout(function() {
-        showToast('Informe enviat a ' + email, 'success');
-    }, 2000);
+    fetch('/api/statistics/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: from, to: to, cups: cups, email: email, message: message, name: name })
+    })
+        .then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        })
+        .then(function(result) {
+            if (result.ok && result.sent) {
+                showToast('Informe enviat a ' + email, 'success');
+                document.getElementById('emailInput').value = '';
+                document.getElementById('emailMessage').value = '';
+            } else {
+                showToast('Error enviant l\'informe', 'error');
+            }
+        })
+        .catch(function(err) {
+            console.error('Error enviant informe:', err);
+            showToast('Error enviant l\'informe', 'error');
+        });
 }
 
 function showToast(message, type) {
