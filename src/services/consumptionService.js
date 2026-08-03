@@ -3,10 +3,10 @@ const { Pool } = require('pg');
 const BalancEnergeticService = require('./balancEnergeticService');
 
 const TOTAL_METRIC_MAP = {
-  SHELLY_SHELLYEM: 'emeter_0_total_avg',
-  POOL: 'emeter_0_total_avg',
-  SHELLY_ANNOUNCE: 'emeter_0_total_avg',
-  PLUG: 'events_rpc_params_switch:0_aenergy_total_avg',
+  SHELLY_SHELLYEM: 'emeter_0_total_max',
+  POOL: 'emeter_0_total_max',
+  SHELLY_ANNOUNCE: 'emeter_0_total_max',
+  PLUG: 'events_rpc_params_switch:0_aenergy_total_max',
 };
 
 function roundToQuarterHour(date) {

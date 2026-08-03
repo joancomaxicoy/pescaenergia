@@ -14,7 +14,7 @@ router.get('/recent', asyncHandler(async (req, res) => {
       `SELECT timestamp, device_id, metric_name, value
        FROM energy_metrics
        WHERE device_id LIKE 'gen-%'
-         AND metric_name = 'e_total_fotovoltaica_avg'
+         AND metric_name = 'e_total_fotovoltaica_max'
          AND timestamp >= NOW() - INTERVAL '24 hours'
        ORDER BY device_id, timestamp DESC`,
     );

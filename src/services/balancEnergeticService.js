@@ -96,7 +96,7 @@ class BalancEnergeticService {
 
     const currentResult = await database.query(
       `SELECT value FROM energy_metrics
-       WHERE device_id = $1 AND metric_name = 'e_total_fotovoltaica_avg'
+       WHERE device_id = $1 AND metric_name = 'e_total_fotovoltaica_max'
        ORDER BY timestamp DESC LIMIT 1`,
       [deviceId]
     );
