@@ -1,0 +1,255 @@
+.sim-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #1a1a2e;
+}
+
+.sim-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: white;
+    padding: 25px 30px;
+    border-radius: 15px;
+    margin-bottom: 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.sim-header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.sim-header-subtitle {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-top: 4px;
+}
+
+.sim-header-subtitle span {
+    margin-left: 15px;
+    font-weight: 600;
+    color: #4fc3f7;
+}
+
+.sim-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sim-header-actions label {
+    font-size: 14px;
+    opacity: 0.85;
+}
+
+.sim-header-actions select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    font-size: 14px;
+    background: white;
+    color: #1a1a2e;
+    cursor: pointer;
+}
+
+.sim-participation-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: white;
+    border-radius: 8px;
+    padding: 4px 12px;
+}
+
+.sim-participation-control input {
+    width: 70px;
+    padding: 4px 4px;
+    border: none;
+    outline: none;
+    font-weight: 700;
+    font-size: 15px;
+    color: #1a1a2e;
+    background: transparent;
+}
+
+.sim-participation-control span {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.sim-participation-note {
+    background: #fff8e1;
+    border: 1px solid #ffd54f;
+    color: #7a5c00;
+    border-radius: 10px;
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.sim-loading {
+    text-align: center;
+    color: #4fc3f7;
+    font-weight: 600;
+    padding: 8px 0;
+    min-height: 20px;
+}
+
+.sim-card {
+    background: #ffffff;
+    border: 1px solid #e3e6ef;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.sim-card-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+    color: #1a1a2e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sim-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.sim-kpi {
+    background: #f7f8fc;
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sim-kpi-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.sim-kpi-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.sim-kpi-sub {
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.sim-chart-container {
+    position: relative;
+    height: 380px;
+    width: 100%;
+}
+
+.sim-chart-legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin-top: 15px;
+    flex-wrap: wrap;
+}
+
+.sim-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #374151;
+}
+
+.sim-legend-color {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+.sim-legend-color.generation {
+    background: #ffd93d;
+}
+
+.sim-legend-color.consumption {
+    background: #1a1a2e;
+}
+
+.sim-legend-color.charge {
+    background: #8bc34a;
+}
+
+.sim-legend-color.discharge {
+    background: #4a90d9;
+}
+
+.sim-legend-color.soc {
+    background: #ab47bc;
+}
+
+.sim-battery-controls {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    background: #f7f8fc;
+    border-radius: 12px;
+    padding: 15px;
+}
+
+.sim-battery-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.sim-battery-controls label span {
+    font-weight: 400;
+    color: #9ca3af;
+    margin-top: -2px;
+}
+
+.sim-battery-controls input {
+    width: 110px;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+@media (max-width: 640px) {
+    .sim-chart-container {
+        height: 280px;
+    }
+
+    .sim-kpis {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    }
+}

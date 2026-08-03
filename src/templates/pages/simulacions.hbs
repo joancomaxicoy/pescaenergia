@@ -1,0 +1,218 @@
+<link rel="stylesheet" href="/css/simulacions.css">
+
+<div class="sim-container" id="simContainer" data-cups="{{user.cups}}" data-name="{{user.name}}">
+    <!-- Header -->
+    <div class="sim-header">
+        <div>
+            <h1>Simulacions</h1>
+            <div class="sim-header-subtitle">
+                Dia típic per moda i mitjanes
+                <span id="simPeriod"></span>
+            </div>
+        </div>
+        <div class="sim-header-actions">
+            <label for="periodSelect">Període</label>
+            <select id="periodSelect">
+                <option value="7">Últims 7 dies</option>
+                <option value="15">15 dies</option>
+                <option value="30" selected>30 dies</option>
+                <option value="90">90 dies</option>
+            </select>
+            <label for="participationPct">Participació</label>
+            <div class="sim-participation-control">
+                <input type="number" id="participationPct" value="" step="0.1" min="0" max="100" inputmode="decimal">
+                <span>%</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="simParticipationNote" class="sim-participation-note" hidden></div>
+
+    <div id="simLoading" class="sim-loading"></div>
+
+    <!-- Card: Dia típic per moda -->
+    <div class="sim-card">
+        <div class="sim-card-header">
+            <h2>Dia típic (per moda - valor més probable per 15 min)</h2>
+        </div>
+        <div class="sim-kpis">
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Consum</span>
+                <span class="sim-kpi-value" id="kpiDayConsumption">--</span>
+                <span class="sim-kpi-sub">kWh/dia</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Generació</span>
+                <span class="sim-kpi-value" id="kpiDayGeneration">--</span>
+                <span class="sim-kpi-sub">kWh/dia</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Importació</span>
+                <span class="sim-kpi-value" id="kpiDayImport">--</span>
+                <span class="sim-kpi-sub">kWh/dia</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Exportació</span>
+                <span class="sim-kpi-value" id="kpiDayExport">--</span>
+                <span class="sim-kpi-sub">kWh/dia</span>
+            </div>
+        </div>
+        <div class="sim-chart-container">
+            <canvas id="modeChart"></canvas>
+        </div>
+        <div class="sim-chart-legend">
+            <div class="sim-legend-item">
+                <span class="sim-legend-color generation"></span>
+                <span>Generació assignada</span>
+            </div>
+            <div class="sim-legend-item">
+                <span class="sim-legend-color consumption"></span>
+                <span>Consum</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card: Dia típic per mitjanes -->
+    <div class="sim-card">
+        <div class="sim-card-header">
+            <h2>Dia típic (mitjanes per 15 min)</h2>
+        </div>
+        <div class="sim-chart-container">
+            <canvas id="meanChart"></canvas>
+        </div>
+        <div class="sim-chart-legend">
+            <div class="sim-legend-item">
+                <span class="sim-legend-color generation"></span>
+                <span>Generació assignada</span>
+            </div>
+            <div class="sim-legend-item">
+                <span class="sim-legend-color consumption"></span>
+                <span>Consum</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card: Simulació de bateria -->
+    <div class="sim-card">
+        <div class="sim-card-header">
+            <h2>Simulació de bateria (sobre el dia típic per moda)</h2>
+        </div>
+        <div class="sim-battery-controls">
+            <label>Capacitat
+                <input type="number" id="batteryKwh" value="5" step="0.5" min="0.5" max="50">
+                <span>kWh</span>
+            </label>
+            <label>Potència
+                <input type="number" id="batteryKw" value="2.5" step="0.5" min="0.1" max="50">
+                <span>kW</span>
+            </label>
+            <label>Eficiència
+                <input type="number" id="batteryEfficiency" value="90" step="5" min="50" max="100">
+                <span>%</span>
+            </label>
+        </div>
+        <div class="sim-kpis">
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Carregada</span>
+                <span class="sim-kpi-value" id="kpiBatteryCharge">--</span>
+                <span class="sim-kpi-sub">kWh/dia</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Descarregada</span>
+                <span class="sim-kpi-value" id="kpiBatteryDischarge">--</span>
+                <span class="sim-kpi-sub">kWh/dia</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Autoconsum</span>
+                <span class="sim-kpi-value" id="kpiBatteryAutoconsum">--</span>
+                <span class="sim-kpi-sub" id="kpiBatteryAutoconsumSub">% del consum cobert</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Excedent capturat</span>
+                <span class="sim-kpi-value" id="kpiBatteryCaptured">--</span>
+                <span class="sim-kpi-sub">% de l'excedent</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Import amb bateria</span>
+                <span class="sim-kpi-value" id="kpiBatteryImport">--</span>
+                <span class="sim-kpi-sub">kWh/dia</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Export amb bateria</span>
+                <span class="sim-kpi-value" id="kpiBatteryExport">--</span>
+                <span class="sim-kpi-sub">kWh/dia</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Capacitat necessària</span>
+                <span class="sim-kpi-value" id="kpiBatteryRequired">--</span>
+                <span class="sim-kpi-sub">kWh per captar-ho tot</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Dies per omplir</span>
+                <span class="sim-kpi-value" id="kpiBatteryFillDays">--</span>
+            </div>
+        </div>
+        <div class="sim-chart-container">
+            <canvas id="batteryChart"></canvas>
+        </div>
+        <div class="sim-chart-legend">
+            <div class="sim-legend-item">
+                <span class="sim-legend-color generation"></span>
+                <span>Generació assignada</span>
+            </div>
+            <div class="sim-legend-item">
+                <span class="sim-legend-color consumption"></span>
+                <span>Consum</span>
+            </div>
+            <div class="sim-legend-item">
+                <span class="sim-legend-color charge"></span>
+                <span>Càrrega bateria</span>
+            </div>
+            <div class="sim-legend-item">
+                <span class="sim-legend-color discharge"></span>
+                <span>Descàrrega bateria</span>
+            </div>
+            <div class="sim-legend-item">
+                <span class="sim-legend-color soc"></span>
+                <span>SOC bateria</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card: Resum del període -->
+    <div class="sim-card">
+        <div class="sim-card-header">
+            <h2>Resum del període</h2>
+        </div>
+        <div class="sim-kpis">
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Consum total</span>
+                <span class="sim-kpi-value" id="kpiPeriodConsumption">--</span>
+                <span class="sim-kpi-sub">kWh al període</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Generació total</span>
+                <span class="sim-kpi-value" id="kpiPeriodGeneration">--</span>
+                <span class="sim-kpi-sub">kWh al període</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Importació total</span>
+                <span class="sim-kpi-value" id="kpiPeriodImport">--</span>
+                <span class="sim-kpi-sub">kWh al període</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Exportació total</span>
+                <span class="sim-kpi-value" id="kpiPeriodExport">--</span>
+                <span class="sim-kpi-sub">kWh al període</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Dies analitzats</span>
+                <span class="sim-kpi-value" id="kpiPeriodDays">--</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/js/grafics_dia_tipic.js"></script>

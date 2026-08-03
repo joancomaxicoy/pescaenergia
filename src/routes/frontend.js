@@ -282,6 +282,24 @@ router.get('/estadistiques', checkAuthFromCookie, requireAuth, requireCups, asyn
 });
 
 /**
+ * Página de Simulacions
+ */
+router.get('/simulacions', checkAuthFromCookie, requireAuth, requireCups, (req, res) => {
+    res.render('pages/simulacions', {
+        title: 'Simulacions',
+        layout: 'main',
+        showNavbar: true,
+        showFooter: true,
+        isSimulacions: true,
+        user: req.user.userData,
+        additionalScripts: [],
+        helpers: {
+            formatDate: formatDate
+        }
+    });
+});
+
+/**
  * Página de Endolls
  */
 router.get('/endolls', checkAuthFromCookie, requireAuth, requireCups, (req, res) => {
