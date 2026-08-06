@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
-const { sanitizeInput } = require('../middleware/validation');
+const { sanitizeInput, validateUpdateUser } = require('../middleware/validation');
 const database = require('../utils/database');
 const logger = require('../utils/logger');
 const User = require('../models/User');
@@ -243,6 +243,250 @@ router.get('/users',
 
 /**
  * @swagger
+ * /api/admin/users/{id}:
+ *   put:
+ *     summary: Actualizar un usuario (solo admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del usuario
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               cups:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Usuario actualizado
+ *       404:
+ *         description: Usuario no encontrado
+ *       409:
+ *         description: El email ya está en uso
+ */
+router.put('/users/:id',
+  authenticateToken,
+  requireAdmin,
+  sanitizeInput,
+  validateUpdateUser,
+  async (req, res) => {
+    try {
+      // Asegurar que la conexión esté establecida
+      if (!database.pool) {
+        await database.connect();
+      }
+
+      const { id } = req.params;
+      const { name, email, cups } = req.body;
+
+      const existingUser = await User.findById(id);
+      if (!existingUser) {
+        return res.status(404).json({
+          success: false,
+          error: 'Usuari no trobat'
+        });
+      }
+
+      // Si es canvia l'email, validar que no estigui en ús
+      let emailChanged = false;
+      const cleanEmail = email ? email.toLowerCase().trim() : null;
+      if (cleanEmail && cleanEmail !== existingUser.email.toLowerCase()) {
+        const conflict = await User.findByEmail(cleanEmail);
+        if (conflict && conflict.id !== id) {
+          return res.status(409).json({
+            success: false,
+            error: 'Ja existeix un usuari amb aquest email'
+          });
+        }
+        emailChanged = true;
+      }
+
+      // Gestionar el canvi de CUPS (canvi de domicili)
+      const newCups = cups ? cups.trim() : null;
+      const oldCups = existingUser.cups ? existingUser.cups.trim() : null;
+      if (newCups !== oldCups) {
+        // Alliberar el CUPS antic
+        if (oldCups) {
+          try {
+            await CupsService.unassignCups(oldCups);
+          } catch (err) {
+            logger.warn('No s\'ha pogut alliberar el CUPS anterior', { cups: oldCups, error: err.message });
+          }
+        }
+
+        // Assignar el CUPS nou (crea el device si no existeix)
+        if (newCups) {
+          await CupsService.assignCups(newCups, req.user.userId, 'admin', id);
+        }
+      }
+
+      // Actualitzar els camps bàsics
+      const fields = [];
+      const values = [];
+      let paramCount = 1;
+
+      if (name !== undefined) {
+        fields.push(`name = $${paramCount++}`);
+        values.push(name.trim());
+      }
+
+      if (cleanEmail !== null) {
+        fields.push(`email = $${paramCount++}`);
+        values.push(cleanEmail);
+        if (emailChanged) {
+          fields.push('email_validated = false');
+          fields.push('email_verification_token = NULL');
+          fields.push('email_verification_expires = NULL');
+        }
+      }
+
+      if (fields.length === 0) {
+        return res.json({
+          success: true,
+          data: existingUser.toJSON(),
+          message: 'No hi ha cap camp per actualitzar'
+        });
+      }
+
+      fields.push('updated_at = NOW()');
+      values.push(id);
+
+      const updateResult = await database.query(
+        `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+        values
+      );
+
+      const updatedUser = updateResult.rows[0];
+
+      // Reenviar email de confirmació si ha canviat l'email
+      let responseMessage = 'Usuari actualitzat correctament';
+      if (emailChanged) {
+        try {
+          const user = new User(updatedUser);
+          const verificationToken = await user.generateEmailVerificationToken();
+          await emailService.sendEmailVerification(user, verificationToken);
+          responseMessage = 'Usuari actualitzat correctament. S\'ha enviat un email de confirmació al nou correu.';
+        } catch (err) {
+          logger.error('Error enviant l\'email de confirmació', { error: err.message });
+          responseMessage = 'Usuari actualitzat correctament, però no s\'ha pogut enviar l\'email de confirmació.';
+        }
+      }
+
+      res.json({
+        success: true,
+        data: updatedUser,
+        message: responseMessage
+      });
+    } catch (error) {
+      logger.error('Error actualizando usuario:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error intern del servidor'
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   delete:
+ *     summary: Eliminar un usuario (solo admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID del usuario
+ *     responses:
+ *       200:
+ *         description: Usuario eliminado
+ *       400:
+ *         description: No se puede eliminar el propio usuario
+ *       404:
+ *         description: Usuario no encontrado
+ */
+router.delete('/users/:id',
+  authenticateToken,
+  requireAdmin,
+  sanitizeInput,
+  async (req, res) => {
+    const client = await database.getClient();
+
+    try {
+      const { id } = req.params;
+
+      if (id === req.user.userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'No pots eliminar el teu propi usuari'
+        });
+      }
+
+      const existingUser = await User.findById(id);
+      if (!existingUser) {
+        return res.status(404).json({
+          success: false,
+          error: 'Usuari no trobat'
+        });
+      }
+
+      await client.query('BEGIN');
+
+      // Participacions que aquest usuari va assignar: deixar-les sense responsable
+      await client.query(
+        'UPDATE user_participation SET assigned_by = NULL, updated_at = NOW() WHERE assigned_by = $1',
+        [id]
+      );
+
+      // Dispositius del seu CUPS: desassignar perquè quedi lliure per al proper resident
+      await client.query(
+        "UPDATE devices SET user_id = 'not_assigned', updated_at = NOW() WHERE user_id = $1",
+        [id]
+      );
+
+      // Eliminar l'usuari (participacions i balanc_energetic s'esborren en cascada per FK)
+      await client.query('DELETE FROM users WHERE id = $1', [id]);
+
+      await client.query('COMMIT');
+
+      res.json({
+        success: true,
+        message: 'Usuari eliminat correctament'
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error eliminando usuario:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error intern del servidor'
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/**
+ * @swagger
  * /api/admin/participations:
  *   get:
  *     summary: Obtener todas las participaciones (solo admin)
@@ -415,6 +659,12 @@ router.post('/participations',
       });
     } catch (error) {
       logger.error('Error creando participación:', error);
+      if (error.code === '23505') {
+        return res.status(409).json({
+          success: false,
+          error: 'Aquest usuari ja té una participació en aquest generador'
+        });
+      }
       res.status(500).json({
         success: false,
         error: 'Error interno del servidor'
@@ -512,6 +762,12 @@ router.put('/participations/:id',
       });
     } catch (error) {
       logger.error('Error actualizando participación:', error);
+      if (error.code === '23505') {
+        return res.status(409).json({
+          success: false,
+          error: 'Aquest usuari ja té una participació en aquest generador'
+        });
+      }
       res.status(500).json({
         success: false,
         error: 'Error interno del servidor'

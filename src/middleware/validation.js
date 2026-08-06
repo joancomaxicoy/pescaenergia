@@ -200,8 +200,44 @@ const validateUpdateProfile = [
   body('cups')
     .optional()
     .trim()
-    .matches(/^ES\d{18}[A-Z]{2}\d{2}[A-Z]$/)
-    .withMessage('El CUPS ha de tenir el format vàlid espanyol (ES + 18 dígits + 2 lletres + 2 dígits + 1 lletra)'),
+    .matches(/^ES[A-Z0-9]{20}$/)
+    .withMessage('El CUPS ha de tenir el format vàlid espanyol (ES + 20 caràcters alfanumèrics)'),
+
+  handleValidationErrors
+];
+
+// Validaciones para actualizar un usuario desde admin
+const validateUpdateUser = [
+  body('email')
+    .optional()
+    .isEmail()
+    .withMessage('Ha de ser un email vàlid')
+    .normalizeEmail({
+      gmail_remove_dots: false,
+      gmail_remove_subaddress: false
+    })
+    .isLength({ max: 255 })
+    .withMessage('L\'email no pot excedir 255 caràcters'),
+
+  body('name')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('El nom ha de tenir entre 2 i 100 caràcters')
+    .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/)
+    .withMessage('El nom només pot contenir lletres i espais'),
+
+  body('cups')
+    .optional({ values: 'falsy' })
+    .trim()
+    .custom((value) => {
+      if (value === '') return true;
+      const cupsRegex = /^ES[A-Z0-9]{20}$/;
+      if (!cupsRegex.test(value)) {
+        throw new Error('CUPS invàlid');
+      }
+      return true;
+    }),
 
   handleValidationErrors
 ];
@@ -241,7 +277,7 @@ const validatePagination = [
 
 // Validación personalizada para CUPS
 const validateCUPS = (value) => {
-  const cupsRegex = /^ES\d{18}[A-Z]{2}\d{2}[A-Z]$/;
+  const cupsRegex = /^ES[A-Z0-9]{20}$/;
   if (!cupsRegex.test(value)) {
     throw new Error('CUPS invàlid');
   }
@@ -338,6 +374,7 @@ module.exports = {
   validateChangePassword,
   validateChangeCredentials,
   validateUpdateProfile,
+  validateUpdateUser,
   validateRefreshToken,
   validateUserId,
   validatePagination,
