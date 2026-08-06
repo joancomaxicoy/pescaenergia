@@ -17,6 +17,7 @@ const {
   validateForgotPassword,
   validateResetPassword,
   validateChangePassword,
+  validateChangeCredentials,
   validateUpdateProfile,
   validateRefreshToken,
   sanitizeInput
@@ -30,7 +31,7 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
   max: 15, // máximo 5 intentos por IP
   message: {
-    error: 'Demasiados intentos de autenticación. Intenta de nuevo en 15 minutos.',
+    error: 'Massa intents d\'autenticació. Torna-ho a provar en 15 minuts.',
     code: 'TOO_MANY_AUTH_ATTEMPTS'
   },
   standardHeaders: true,
@@ -42,7 +43,7 @@ const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hora
   max: 3, // máximo 3 registros por IP por hora
   message: {
-    error: 'Demasiados registros desde esta IP. Intenta de nuevo en 1 hora.',
+    error: 'Massa registres des d\'aquesta IP. Torna-ho a provar en 1 hora.',
     code: 'TOO_MANY_REGISTRATIONS'
   }
 });
@@ -52,9 +53,21 @@ const passwordResetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hora
   max: 3, // máximo 3 intentos por IP por hora
   message: {
-    error: 'Demasiadas solicitudes de reset de contraseña. Intenta de nuevo en 1 hora.',
+    error: 'Massa sol·licituds de restabliment de contrasenya. Torna-ho a provar en 1 hora.',
     code: 'TOO_MANY_PASSWORD_RESETS'
   }
+});
+
+// Rate limiting para cambio de credenciales
+const credentialChangeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 10, // máximo 10 intentos por IP en 15 min
+  message: {
+    error: 'Massa intents de canvi de credencials. Torna-ho a provar en 15 minuts.',
+    code: 'TOO_MANY_CREDENTIAL_CHANGES'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 /**
@@ -163,7 +176,7 @@ router.post('/register',
     } catch (error) {
       logger.error('Error en registro:', error);
 
-      if (error.message.includes('Ya existe un usuario')) {
+      if (error.message.includes('Ja existeix un usuari')) {
         return res.status(409).json({
           error: error.message,
           code: 'USER_ALREADY_EXISTS'
@@ -247,7 +260,7 @@ router.post('/login',
       }
 
       res.status(401).json({
-        error: 'Credenciales inválidas',
+        error: 'Credencials invàlides',
         code: 'INVALID_CREDENTIALS'
       });
     }
@@ -418,7 +431,7 @@ router.post('/forgot-password',
     } catch (error) {
       logger.error('Error en forgot password:', error);
       res.status(500).json({
-        error: 'Error interno del servidor',
+        error: 'Error intern del servidor',
         code: 'INTERNAL_ERROR'
       });
     }
@@ -540,7 +553,7 @@ router.get('/profile',
     } catch (error) {
       logger.error('Error obteniendo perfil:', error);
       res.status(500).json({
-        error: 'Error interno del servidor',
+        error: 'Error intern del servidor',
         code: 'INTERNAL_ERROR'
       });
     }
@@ -653,6 +666,72 @@ router.post('/change-password',
 
 /**
  * @swagger
+ * /api/auth/change-credentials:
+ *   post:
+ *     summary: Cambiar email y/o contraseña de un administrador verificando las credenciales actuales
+ *     tags: [Autenticación]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - currentEmail
+ *               - currentPassword
+ *             properties:
+ *               currentEmail:
+ *                 type: string
+ *                 format: email
+ *               currentPassword:
+ *                 type: string
+ *               newEmail:
+ *                 type: string
+ *                 format: email
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 8
+ *     responses:
+ *       200:
+ *         description: Credenciales actualizadas
+ *       400:
+ *         description: Credenciales actuales incorrectas o datos inválidos
+ *       403:
+ *         description: No autorizado (no es admin)
+ *       409:
+ *         description: El nuevo email ya está en uso
+ *       429:
+ *         description: Demasiados intentos
+ */
+router.post('/change-credentials',
+  credentialChangeLimiter,
+  sanitizeInput,
+  validateChangeCredentials,
+  logAuthAction('change-credentials'),
+  async (req, res) => {
+    try {
+      const result = await authService.changeCredentials(
+        req.body.currentEmail,
+        req.body.currentPassword,
+        req.body.newEmail || undefined,
+        req.body.newPassword || undefined
+      );
+      res.json(result);
+    } catch (error) {
+      logger.error('Error canviant credencials:', error);
+      let status = 400;
+      if (error.code === 'UNAUTHORIZED') status = 403;
+      else if (error.code === 'EMAIL_IN_USE') status = 409;
+      res.status(status).json({
+        error: error.message,
+        code: error.code || 'CREDENTIALS_CHANGE_ERROR'
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
  * /api/auth/set-initial-password:
  *   post:
  *     summary: Establecer contraseña inicial (usuarios creados por admin)
@@ -695,7 +774,7 @@ router.post('/set-initial-password',
       // Validar campos requeridos
       if (!token || !password) {
         return res.status(400).json({
-          error: 'Token y contraseña son requeridos',
+          error: 'El token i la contrasenya són obligatoris',
           code: 'MISSING_FIELDS'
         });
       }
@@ -703,7 +782,7 @@ router.post('/set-initial-password',
       // Validar longitud mínima de password
       if (password.length < 8) {
         return res.status(400).json({
-          error: 'La contraseña debe tener al menos 8 caracteres',
+          error: 'La contrasenya ha de tenir almenys 8 caràcters',
           code: 'PASSWORD_TOO_SHORT'
         });
       }
@@ -716,27 +795,27 @@ router.post('/set-initial-password',
       if (error.message.includes('Token de verificació invàlid') ||
         error.message.includes('caducat')) {
         return res.status(400).json({
-          error: 'Token inválido o expirado',
+          error: 'Token invàlid o caducat',
           code: 'INVALID_TOKEN'
         });
       }
 
       if (error.message.includes('Email no verificat')) {
         return res.status(400).json({
-          error: 'Email no verificado',
+          error: 'Email no verificat',
           code: 'EMAIL_NOT_VERIFIED'
         });
       }
 
       if (error.message.includes('ja té una contrasenya')) {
         return res.status(400).json({
-          error: 'Este usuario ya tiene una contraseña establecida',
+          error: 'Aquest usuari ja té una contrasenya establerta',
           code: 'PASSWORD_ALREADY_SET'
         });
       }
 
       res.status(500).json({
-        error: 'Error interno del servidor',
+        error: 'Error intern del servidor',
         code: 'INTERNAL_ERROR'
       });
     }
@@ -772,7 +851,7 @@ router.post('/test-email',
     // Solo disponible en desarrollo
     if (process.env.NODE_ENV === 'production') {
       return res.status(404).json({
-        error: 'Endpoint no disponible en producción',
+        error: 'Endpoint no disponible en producció',
         code: 'NOT_AVAILABLE'
       });
     }
@@ -781,20 +860,20 @@ router.post('/test-email',
       const { email } = req.body;
       if (!email) {
         return res.status(400).json({
-          error: 'Email requerido',
+          error: 'Email obligatori',
           code: 'EMAIL_REQUIRED'
         });
       }
 
       await emailService.sendTestEmail(email);
       res.json({
-        message: 'Email de prueba enviado exitosamente',
+        message: 'Email de prova enviat correctament',
         email: email
       });
     } catch (error) {
       logger.error('Error enviando email de prueba:', error);
       res.status(500).json({
-        error: 'Error enviando email de prueba',
+        error: 'Error enviant l\'email de prova',
         code: 'EMAIL_TEST_ERROR'
       });
     }

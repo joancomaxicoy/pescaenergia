@@ -154,6 +154,39 @@ const validateChangePassword = [
   handleValidationErrors
 ];
 
+// Validaciones para cambio de credenciales (email y/o password) desde el login
+const validateChangeCredentials = [
+  body('currentEmail')
+    .isEmail()
+    .withMessage('Email actual invàlid')
+    .normalizeEmail({
+      gmail_remove_dots: false,
+      gmail_remove_subaddress: false
+    }),
+
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('La contrasenya actual és obligatòria'),
+
+  body('newEmail')
+    .optional({ checkFalsy: true })
+    .isEmail()
+    .withMessage('El nou email ha de ser vàlid')
+    .normalizeEmail({
+      gmail_remove_dots: false,
+      gmail_remove_subaddress: false
+    }),
+
+  body('newPassword')
+    .optional({ checkFalsy: true })
+    .isLength({ min: 8 })
+    .withMessage('La nova contrasenya ha de tenir almenys 8 caràcters')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('La nova contrasenya ha de contenir almenys una minúscula, una majúscula i un número'),
+
+  handleValidationErrors
+];
+
 // Validaciones para actualización de perfil
 const validateUpdateProfile = [
   body('name')
@@ -303,6 +336,7 @@ module.exports = {
   validateForgotPassword,
   validateResetPassword,
   validateChangePassword,
+  validateChangeCredentials,
   validateUpdateProfile,
   validateRefreshToken,
   validateUserId,

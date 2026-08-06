@@ -340,6 +340,31 @@ class User {
     }
   }
 
+  async updateEmail(newEmail) {
+    try {
+      const query = `
+        UPDATE users 
+        SET email = $1, 
+            updated_at = NOW()
+        WHERE id = $2
+        RETURNING *
+      `;
+
+      const result = await database.query(query, [newEmail, this.id]);
+
+      if (result.rows.length > 0) {
+        this.email = result.rows[0].email;
+        this.updated_at = result.rows[0].updated_at;
+      }
+
+      logger.info('Email actualizado', { userId: this.id });
+      return true;
+    } catch (error) {
+      logger.error('Error actualizando email:', error);
+      throw error;
+    }
+  }
+
   // Crear usuario con password temporal
   static async createWithTempPassword(userData) {
     try {

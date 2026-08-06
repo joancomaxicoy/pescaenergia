@@ -12,7 +12,7 @@ const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
-      error: 'Errores de validación',
+      error: 'Errors de validació',
       details: errors.array(),
       timestamp: new Date().toISOString()
     });
@@ -34,7 +34,7 @@ const validateGenerator = asyncHandler(async (req, res, next) => {
     
     if (!generatorsConfig[generatorCode] || !generatorsConfig[generatorCode].active) {
       return res.status(404).json({
-        error: 'Generador no encontrado',
+        error: 'Generador no trobat',
         generatorCode,
         availableGenerators: Object.keys(generatorsConfig).filter(code => generatorsConfig[code].active),
         timestamp: new Date().toISOString()
@@ -56,7 +56,7 @@ const validateGenerator = asyncHandler(async (req, res, next) => {
     });
     
     res.status(500).json({
-      error: 'Error validando generador',
+      error: 'Error validant el generador',
       details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
       timestamp: new Date().toISOString()
     });
@@ -167,7 +167,7 @@ router.get('/',
       });
 
       res.status(500).json({
-        error: 'Error cargando configuración de generadores',
+        error: 'Error carregant la configuració dels generadors',
         details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
         timestamp: new Date().toISOString()
       });
@@ -661,7 +661,7 @@ router.get('/:generatorCode/info',
     
     if (!result) {
       return res.status(404).json({
-        error: 'Generador no encontrado',
+        error: 'Generador no trobat',
         generatorCode,
         timestamp: new Date().toISOString()
       });
@@ -755,7 +755,7 @@ router.get('/:generatorCode/metrics/available',
     const deviceExists = await deviceHistoryService.validateDevice(generatorCode);
     if (!deviceExists) {
       return res.status(404).json({
-        error: 'Generador no encontrado',
+        error: 'Generador no trobat',
         generatorCode,
         timestamp: new Date().toISOString()
       });
@@ -852,7 +852,7 @@ router.get('/health',
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
         service: 'GeneratorsService',
-        error: 'No se pudo cargar la configuración de generadores'
+        error: 'No s\'ha pogut carregar la configuració dels generadors'
       });
     }
   })

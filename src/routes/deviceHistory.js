@@ -13,7 +13,7 @@ const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
-      error: 'Errores de validación',
+      error: 'Errors de validació',
       details: errors.array(),
       timestamp: new Date().toISOString()
     });
@@ -493,7 +493,7 @@ router.get('/:deviceId/info',
     
     if (!result) {
       return res.status(404).json({
-        error: 'Dispositivo no encontrado',
+        error: 'Dispositiu no trobat',
         deviceId,
         timestamp: new Date().toISOString()
       });
@@ -584,7 +584,7 @@ router.get('/:deviceId/metrics/available',
     const deviceExists = await deviceHistoryService.validateDevice(deviceId);
     if (!deviceExists) {
       return res.status(404).json({
-        error: 'Dispositivo no encontrado',
+        error: 'Dispositiu no trobat',
         deviceId,
         timestamp: new Date().toISOString()
       });
@@ -773,7 +773,7 @@ router.post('/history/cache/clear',
     deviceHistoryService.clearCache();
     
     res.json({
-      message: 'Cache limpiado exitosamente',
+      message: 'Cache netejada correctament',
       timestamp: new Date().toISOString(),
       previousCacheSize
     });
@@ -817,7 +817,7 @@ router.post('/history/stats/reset',
     deviceHistoryService.resetStats();
     
     res.json({
-      message: 'Estadísticas reseteadas exitosamente',
+      message: 'Estadístiques restablertes correctament',
       timestamp: new Date().toISOString()
     });
   })
