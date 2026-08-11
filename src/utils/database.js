@@ -43,7 +43,11 @@ class Database {
       logger.debug('Query ejecutada', { text, duration, rows: res.rowCount });
       return res;
     } catch (error) {
-      logger.error('Error en query de base de datos:', { text, params, error: error.message });
+      logger.error('Error en query de base de datos:', {
+        text,
+        parameterCount: Array.isArray(params) ? params.length : 0,
+        error: error.message
+      });
       throw error;
     }
   }

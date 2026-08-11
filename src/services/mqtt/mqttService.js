@@ -16,13 +16,17 @@ class MqttService {
     this.reconnectInterval = 1000; // 1 segundo inicial
     this.messageHandlers = [];
 
-    // Topics estáticos que siempre se suscriben
-    this.staticTopics = [
-      '#'
-      // 'shellies/#',           // TODOS los datos de dispositivos Shelly
-      // 'ConsumCups/+',         // Datos de consumo por CUPS
-      // '+/ES+/#'               // Cualquier prefijo + CUPS español (acs, endoll1, enchufe23, etc.)
-    ];
+    // Els topics s'han d'autoritzar explícitament per evitar subscriure's a tot el broker.
+    this.staticTopics = (process.env.MQTT_STATIC_TOPICS || '')
+      .split(',')
+      .map(topic => topic.trim())
+      .filter(Boolean);
+
+    if (this.staticTopics.length === 0 || this.staticTopics.includes('#')) {
+      throw new Error(
+        'MQTT_STATIC_TOPICS és obligatòria i no pot contenir la subscripció global #'
+      );
+    }
 
     this.dynamicTopics = [];
     this.subscribedTopics = new Set();

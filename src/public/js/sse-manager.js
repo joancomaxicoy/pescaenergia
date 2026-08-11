@@ -94,20 +94,8 @@ class SSEManager {
         if (!connection) return;
 
         try {
-            // Obtener token de autenticación si está disponible
-            let sseUrl = endpoint;
-            if (window.apiClient && window.apiClient.getAuthToken) {
-                const token = window.apiClient.getAuthToken();
-                if (token) {
-                    const separator = endpoint.includes('?') ? '&' : '?';
-                    sseUrl = `${endpoint}${separator}token=${encodeURIComponent(token)}`;
-                }
-            }
-
             console.log('🔌 SSEManager: Creando conexión para endpoint:', endpoint);
-            console.log('🔗 SSEManager: URL completa:', sseUrl);
-
-            connection.eventSource = new EventSource(sseUrl);
+            connection.eventSource = new EventSource(endpoint, { withCredentials: true });
 
             // Evento cuando se recibe un mensaje
             connection.eventSource.onmessage = (event) => {

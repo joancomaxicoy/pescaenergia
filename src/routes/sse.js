@@ -9,7 +9,7 @@ const router = express.Router();
 // Middleware SOLO autentica. NO toca cabeceras SSE.
 const authenticateSSE = (req, res, next) => {
   try {
-    const token = req.query.token;
+    const token = req.cookies?.authToken;
     if (!token) return res.status(401).send('Token de acceso requerido');
 
     const decoded = authService.verifyJWT(token);
@@ -38,7 +38,6 @@ router.get('/time', authenticateSSE, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform'); // importante con Cloudflare
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*'); // ajusta si usas credenciales
   res.setHeader('X-Accel-Buffering', 'no'); // útil si hay Nginx por medio
   res.flushHeaders?.();
 
@@ -129,7 +128,6 @@ router.get('/plugs', authenticateSSE, async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
 

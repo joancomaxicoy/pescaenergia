@@ -6,6 +6,7 @@ const handlebars = require('handlebars');
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../utils/logger');
+const { requireEnvironmentVariable } = require('../config/security');
 
 class EmailService {
   constructor() {
@@ -19,20 +20,11 @@ class EmailService {
     if (this.initialized && this.transporter) return;
 
     try {
-      console.log('📧 Inicializando EmailService...');
-      console.log('  SERVIDOR_SMTP:', process.env.SERVIDOR_SMTP);
-      console.log('  PUERTO_SMTP:', process.env.PUERTO_SMTP);
-      console.log('  SMTP_USER:', process.env.SMTP_USER);
-
       // Usar las variables CORRECTAS de tu .env
       const host = process.env.SERVIDOR_SMTP || 'smtp.gmail.com';
       const port = parseInt(process.env.PUERTO_SMTP) || 587;
-      const user = process.env.SMTP_USER || 'app.pescaenergia@gmail.com';
-      const pass = process.env.SMTP_PASSWORD;
-
-      if (!pass) {
-        throw new Error('SMTP_PASSWORD no está definida en el archivo .env');
-      }
+      const user = requireEnvironmentVariable('SMTP_USER');
+      const pass = requireEnvironmentVariable('SMTP_PASSWORD');
 
       // Configurar el transportador SMTP con las variables correctas
       this.transporter = nodemailer.createTransport({

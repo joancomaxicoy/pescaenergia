@@ -20,8 +20,8 @@ El sistema no controla toda la casa, sino solo dispositivos enchufados en relays
 ## Eventos MQTT Técnicos
 
 ### Configuración del Broker MQTT
-- **Host**: `pescaenergia.darwindata.eu:1883`
-- **Credenciales**: Usuario `PescaEnergia`, Password `3n3r91a`
+- **Host**: definit amb `MQTT_BROKER_URL` i `MQTT_BROKER_PORT`
+- **Credencials**: definides amb `MQTT_BROKER_USER` i `MQTT_BROKER_PASSWORD`; no s'han de documentar ni versionar
 - **Client ID**: Único (ej: `giravolt32_subscriber` + random)
 
 ### Eventos a Enviar (Control - Publicar)

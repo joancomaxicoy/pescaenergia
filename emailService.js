@@ -24,13 +24,11 @@ class EmailService {
       // Leer variables de entorno
       const host = process.env.SERVIDOR_SMTP || 'smtp.gmail.com';
       const port = parseInt(process.env.PUERTO_SMTP) || 587;
-      const user = process.env.SMTP_USER || 'app.pescaenergia@gmail.com';
+      const user = process.env.SMTP_USER;
       const pass = process.env.SMTP_PASSWORD;
 
-      console.log('📧 Configuración SMTP:', { host, port, user, hasPass: !!pass });
-
-      if (!pass) {
-        throw new Error('SMTP_PASSWORD no está definida en el archivo .env');
+      if (!user || !pass) {
+        throw new Error('SMTP_USER i SMTP_PASSWORD són obligatòries');
       }
 
       // Configurar el transportador SMTP

@@ -4,10 +4,6 @@ console.log("🔴 EL ARCHIVO emailServices.js SE ESTÁ CARGANDO");
 require('dotenv').config();
 
 require('dotenv').config();
-console.error('📧 EMAIL SERVICE LOADED, ENV CHECK:', {
-    SERVIDOR_SMTP: process.env.SERVIDOR_SMTP,
-    PUERTO_SMTP: process.env.PUERTO_SMTP
-});
 
 const nodemailer = require('nodemailer');
 const handlebars = require('handlebars');
@@ -24,13 +20,6 @@ class EmailService {
 
     async init() {
         try {
-            // Log per veure què està llegint
-            console.log('🔍 DEBUG - Variables SMTP:');
-            console.log('SERVIDOR_SMTP:', process.env.SERVIDOR_SMTP);
-            console.log('PUERTO_SMTP:', process.env.PUERTO_SMTP);
-            console.log('SMTP_USER:', process.env.SMTP_USER);
-            console.log('SMTP_PASSWORD:', process.env.SMTP_PASSWORD ? '***SET***' : 'MISSING');
-
             // Configurar el transportador SMTP
             this.transporter = nodemailer.createTransport({
                 // ojo que el he cambiat no coincideixen amb el .env
