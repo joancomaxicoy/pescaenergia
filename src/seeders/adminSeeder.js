@@ -5,30 +5,34 @@ const logger = require('../utils/logger');
 
 class AdminSeeder {
   constructor() {
-    this.admins = [
-      {
-        email: 'admin@pescaenergia.com',
-        name: 'Administrador Principal',
-        password: 'Admin123!',
-        role: 'admin'
-      },
-      {
-        email: 'eugeni@pescaenergia.com',
-        name: 'Eugeni Selma',
-        password: 'Eugeni123!',
-        role: 'admin'
-      },
-      {
-        email: 'soporte@pescaenergia.com',
-        name: 'Soporte Técnico',
-        password: 'Soporte123!',
-        role: 'admin'
+    this.admins = null;
+  }
+
+  loadAdminsFromEnvironment() {
+    const serializedAdmins = process.env.ADMIN_SEEDER_USERS_JSON;
+
+    if (!serializedAdmins) {
+      throw new Error(
+        'ADMIN_SEEDER_USERS_JSON és obligatòria per crear o eliminar administradors'
+      );
+    }
+
+    try {
+      const admins = JSON.parse(serializedAdmins);
+
+      if (!Array.isArray(admins) || admins.length === 0) {
+        throw new Error('cal indicar com a mínim un administrador');
       }
-    ];
+
+      return admins.map(admin => ({ ...admin, role: 'admin' }));
+    } catch (error) {
+      throw new Error(`ADMIN_SEEDER_USERS_JSON no és un JSON vàlid: ${error.message}`);
+    }
   }
 
   async seed() {
     try {
+      await this.validateAdminData();
       logger.info('Iniciando seeding de administradores...');
 
       // Verificar conexión a la base de datos
@@ -91,6 +95,7 @@ class AdminSeeder {
 
   async rollback() {
     try {
+      await this.validateAdminData();
       logger.info('Iniciando rollback de administradores...');
 
       // Verificar conexión a la base de datos
@@ -179,6 +184,10 @@ class AdminSeeder {
   }
 
   async validateAdminData() {
+    if (!this.admins) {
+      this.admins = this.loadAdminsFromEnvironment();
+    }
+
     const errors = [];
 
     for (const admin of this.admins) {
@@ -193,8 +202,8 @@ class AdminSeeder {
       }
 
       // Validar password
-      if (!admin.password || admin.password.length < 8) {
-        errors.push(`Contraseña muy corta para admin: ${admin.email}`);
+      if (!admin.password || admin.password.length < 12) {
+        errors.push(`Contraseña demasiado corta para admin: ${admin.email}`);
       }
     }
 
@@ -211,9 +220,6 @@ async function runSeeder() {
   const seeder = new AdminSeeder();
   
   try {
-    // Validar datos antes de proceder
-    await seeder.validateAdminData();
-    
     // Ejecutar seeding
     const result = await seeder.seed();
     

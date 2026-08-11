@@ -175,12 +175,12 @@ PORT=3000
 NODE_ENV=development
 
 # Base de Datos
-DATABASE_URL=postgresql://user:pass@host:5432/db
+DATABASE_URL=
 
 # MQTT
 MQTT_BROKER_URL=mqtt://localhost:1883
-MQTT_USERNAME=username
-MQTT_PASSWORD=password
+MQTT_BROKER_USER=<usuari_mqtt>
+MQTT_BROKER_PASSWORD=<contrasenya_mqtt>
 
 # API
 FRONTEND_URL=http://localhost:3001
@@ -341,4 +341,3 @@ tests/
 5. Crear Pull Request
 
 ## **Licencia**
-

@@ -62,7 +62,8 @@ Este documento describe el sistema de autenticación implementado en el backend 
 
 ```env
 # JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+# Genera un valor únic amb: openssl rand -hex 32
+JWT_SECRET=
 JWT_EXPIRES_IN=24h
 REFRESH_TOKEN_EXPIRES_IN=7d
 

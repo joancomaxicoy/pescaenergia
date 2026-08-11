@@ -8,12 +8,11 @@ const handleValidationErrors = (req, res, next) => {
   if (!errors.isEmpty()) {
     const formattedErrors = errors.array().map(error => ({
       field: error.path || error.param,
-      message: error.msg,
-      value: error.value
+      message: error.msg
     }));
 
     logger.warn('Errores de validación', {
-      url: req.url,
+      path: req.path,
       method: req.method,
       errors: formattedErrors,
       ip: req.ip

@@ -4,10 +4,11 @@ const User = require('../models/User');
 const emailService = require('./emailService');
 const googleAuthService = require('./googleAuthService');
 const logger = require('../utils/logger');
+const { getJwtSecret } = require('../config/security');
 
 class AuthService {
   constructor() {
-    this.jwtSecret = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
+    this.jwtSecret = getJwtSecret();
     this.jwtExpiresIn = process.env.JWT_EXPIRES_IN || '24h';
     this.refreshTokenExpiresIn = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
   }

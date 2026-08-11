@@ -52,4 +52,13 @@ Thumbs.db
 .clinerules/
 
 .env
-.env.local
+.env.*
+!.env.example
+
+# Secrets i claus privades
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+service-account*.json

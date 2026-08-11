@@ -45,7 +45,11 @@ class GoogleAuthService {
   async getUserInfo(accessToken) {
     try {
       // Obtener información adicional del usuario usando el access token
-      const response = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${accessToken}`);
+      const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
       
       if (!response.ok) {
         throw new Error('Error obtenint informació de l\'usuari de Google');

@@ -152,11 +152,11 @@ VALUES
 # MQTT Configuration
 MQTT_BROKER_URL=192.168.1.10
 MQTT_BROKER_PORT=1883
-MQTT_BROKER_USER=pescaenergia
-MQTT_BROKER_PASSWORD=your_password
+MQTT_BROKER_USER=<usuari_mqtt>
+MQTT_BROKER_PASSWORD=<contrasenya_mqtt>
 
 # Database Configuration
-DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/database
+DATABASE_URL=
 ```
 
 ### Configuración de Generadores (`src/config/energy-generators.yml`)

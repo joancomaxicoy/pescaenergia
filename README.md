@@ -17,6 +17,8 @@ This README would normally document whatever steps are necessary to get your app
 * How to run tests
 * Deployment instructions
 
+Les credencials i els secrets s'han d'injectar mitjançant variables d'entorn. Consulteu [SECURITY.md](SECURITY.md) i copieu `.env.example` per conèixer la configuració necessària.
+
 ### Contribution guidelines ###
 
 * Writing tests

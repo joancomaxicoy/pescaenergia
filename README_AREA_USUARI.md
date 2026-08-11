@@ -160,7 +160,7 @@ Redirigir a dashboard
 GOOGLE_CLIENT_ID=your_google_client_id
 
 # JWT
-JWT_SECRET=your_jwt_secret
+JWT_SECRET=
 JWT_EXPIRES_IN=24h
 REFRESH_TOKEN_EXPIRES_IN=7d
 

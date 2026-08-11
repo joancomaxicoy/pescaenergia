@@ -1,11 +1,11 @@
 http://pescaenergia.darwindata.eu:4000/index
-usuari32@usuari / 32
+<USUARI_DE_PROVA> / <CONTRASENYA_DE_PROVA>
 
 https://mqtt-explorer.com/
-mosquitto_sub -h pescaenergia.darwindata.eu -p 1883 -u PescaEnergia -P 3n3r91a -t '#' -v
+mosquitto_sub -h <HOST_MQTT> -p <PORT_MQTT> -u <USUARI_MQTT> -P <CONTRASENYA_MQTT> -t '<TOPIC_MQTT>' -v
 
 
-ES0031446458360006JY0F <--- albert
+<CUPS_EXEMPLE> <--- usuari de prova
 
 
 HOME
@@ -40,28 +40,28 @@ Automatitzacio usuari
     > Manteniment de shellies ? com 
         sembla que cada shellies/shellyem/xxx es com si fos una placa o generador d'energia, va enviant dades de produccio
         emeter?
-        shellies/shellyem/ES0031446457063001VV0F/emeter/0/power 145.81
-        shellies/shellyem/ES0031446457063001VV0F/emeter/0/reactive_power -198.46
-        shellies/shellyem/ES0031446457063001VV0F/emeter/0/voltage 233.17
-        shellies/shellyem/ES0031446457063001VV0F/emeter/0/total 15519.7
-        shellies/shellyem/ES0031446457063001VV0F/emeter/0/total_returned 43.7
-        shellies/shellyem/ES0031446457063001VV0F/emeter/1/power 0.00
-        shellies/shellyem/ES0031446457063001VV0F/emeter/1/reactive_power 0.00
-        shellies/shellyem/ES0031446457063001VV0F/emeter/1/voltage 233.17
-        shellies/shellyem/ES0031446457063001VV0F/emeter/1/total 0.0
-        shellies/shellyem/ES0031446457063001VV0F/emeter/1/total_returned 0.0
-        shellies/shellyem/ES0031446457073001SN0F/emeter/0/power 54.03
-        shellies/shellyem/ES0031446457073001SN0F/emeter/0/reactive_power -49.77
-        shellies/shellyem/ES0031446457073001SN0F/emeter/0/pf -0.74
-        shellies/shellyem/ES0031446457073001SN0F/emeter/0/voltage 238.18
-        shellies/shellyem/ES0031446457073001SN0F/emeter/0/total 92498.7
-        shellies/shellyem/ES0031446457073001SN0F/emeter/0/total_returned 0.0
-        shellies/shellyem/ES0031446457073001SN0F/emeter/1/power 0.00
-        shellies/shellyem/ES0031446457073001SN0F/emeter/1/reactive_power 0.00
-        shellies/shellyem/ES0031446457073001SN0F/emeter/1/pf 0.00
-        shellies/shellyem/ES0031446457073001SN0F/emeter/1/voltage 238.18
-        shellies/shellyem/ES0031446457073001SN0F/emeter/1/total 0.0
-        shellies/shellyem/ES0031446457073001SN0F/emeter/1/total_returned 0.0
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/0/power 145.81
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/0/reactive_power -198.46
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/0/voltage 233.17
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/0/total 15519.7
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/0/total_returned 43.7
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/1/power 0.00
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/1/reactive_power 0.00
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/1/voltage 233.17
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/1/total 0.0
+        shellies/shellyem/<CUPS_EXEMPLE_1>/emeter/1/total_returned 0.0
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/0/power 54.03
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/0/reactive_power -49.77
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/0/pf -0.74
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/0/voltage 238.18
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/0/total 92498.7
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/0/total_returned 0.0
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/1/power 0.00
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/1/reactive_power 0.00
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/1/pf 0.00
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/1/voltage 238.18
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/1/total 0.0
+        shellies/shellyem/<CUPS_EXEMPLE_2>/emeter/1/total_returned 0.0
 
     > llogica segons horari o potencia
         
@@ -75,4 +75,3 @@ Automatitzacio usuari
     > percentatge
 
     ----
-
