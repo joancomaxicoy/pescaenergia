@@ -7,6 +7,7 @@ const User = require('../models/User');
 const CupsService = require('../services/cupsService');
 const emailService = require('../services/emailService');
 const configLoader = require('../utils/configLoader');
+const cryptoService = require('../services/cryptoService');
 const crypto = require('crypto');
 
 const router = express.Router();
@@ -216,8 +217,10 @@ router.get('/users',
           id,
           name,
           email,
+          dni,
           cups,
           role,
+          (clau_datadis IS NOT NULL AND clau_datadis <> '') AS datadis_configured,
           email_validated,
           created_at,
           updated_at
@@ -291,7 +294,7 @@ router.put('/users/:id',
       }
 
       const { id } = req.params;
-      const { name, email, cups } = req.body;
+      const { name, email, cups, dni, clau_datadis } = req.body;
 
       const existingUser = await User.findById(id);
       if (!existingUser) {
@@ -354,6 +357,19 @@ router.put('/users/:id',
         }
       }
 
+      // DNI/NIE del soci
+      if (dni !== undefined) {
+        fields.push(`dni = $${paramCount++}`);
+        values.push(dni ? dni.trim().toUpperCase() : null);
+      }
+
+      // Clau d'accés a Datadis: s'encripta abans de desar.
+      // Si ve buida o null es deixa/cap el valor actual.
+      if (clau_datadis !== undefined) {
+        fields.push(`clau_datadis = $${paramCount++}`);
+        values.push(clau_datadis !== '' ? cryptoService.encrypt(clau_datadis) : existingUser.clau_datadis);
+      }
+
       if (fields.length === 0) {
         return res.json({
           success: true,
@@ -370,15 +386,14 @@ router.put('/users/:id',
         values
       );
 
-      const updatedUser = updateResult.rows[0];
+      const updatedUser = new User(updateResult.rows[0]);
 
       // Reenviar email de confirmació si ha canviat l'email
       let responseMessage = 'Usuari actualitzat correctament';
       if (emailChanged) {
         try {
-          const user = new User(updatedUser);
-          const verificationToken = await user.generateEmailVerificationToken();
-          await emailService.sendEmailVerification(user, verificationToken);
+          const verificationToken = await updatedUser.generateEmailVerificationToken();
+          await emailService.sendEmailVerification(updatedUser, verificationToken);
           responseMessage = 'Usuari actualitzat correctament. S\'ha enviat un email de confirmació al nou correu.';
         } catch (err) {
           logger.error('Error enviant l\'email de confirmació', { error: err.message });
@@ -388,7 +403,7 @@ router.put('/users/:id',
 
       res.json({
         success: true,
-        data: updatedUser,
+        data: updatedUser.toJSON(),
         message: responseMessage
       });
     } catch (error) {
@@ -1245,7 +1260,7 @@ router.post('/register',
   sanitizeInput,
   async (req, res) => {
     try {
-      const { name, email, cups } = req.body;
+      const { name, email, cups, dni, clau_datadis } = req.body;
 
       // Validar campos requeridos
       if (!name || !email || !cups) {
@@ -1261,6 +1276,16 @@ router.post('/register',
         return res.status(400).json({
           success: false,
           error: 'Format d\'email invàlid'
+        });
+      }
+
+      // Validar DNI/NIE (opcional)
+      const dniRegex = /^[0-9XYZ][0-9]{7}[A-Za-z]$/;
+      const cleanDni = dni ? dni.trim().toUpperCase() : null;
+      if (cleanDni && !dniRegex.test(cleanDni)) {
+        return res.status(400).json({
+          success: false,
+          error: 'DNI/NIE invàlid'
         });
       }
 
@@ -1288,7 +1313,9 @@ router.post('/register',
         name: name.trim(),
         role: 'user',
         email_validated: false,
-        cups: cups.trim()
+        cups: cups.trim(),
+        dni: cleanDni,
+        clau_datadis: clau_datadis ? cryptoService.encrypt(clau_datadis) : null
       });
 
       // Asignar el CUPS y crear el device

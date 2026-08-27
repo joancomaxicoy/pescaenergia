@@ -239,6 +239,23 @@ const validateUpdateUser = [
       return true;
     }),
 
+  body('dni')
+    .optional({ values: 'falsy' })
+    .trim()
+    .custom((value) => {
+      if (value === '') return true;
+      const dniRegex = /^[0-9XYZ][0-9]{7}[A-Za-z]$/;
+      if (!dniRegex.test(value.toUpperCase())) {
+        throw new Error('DNI/NIE invàlid');
+      }
+      return true;
+    }),
+
+  body('clau_datadis')
+    .optional({ values: 'falsy' })
+    .isLength({ max: 100 })
+    .withMessage('La clau de Datadis no pot superar els 100 caràcters'),
+
   handleValidationErrors
 ];
 
