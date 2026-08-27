@@ -1,5 +1,6 @@
 const database = require('../utils/database');
 const logger = require('../utils/logger');
+const { groupByTimestamp, interpolateSeries, computeDaylightWindow } = require('../utils/interpolationUtils');
 
 const generatorScales = {
   'giravolt': 100,
@@ -7,28 +8,22 @@ const generatorScales = {
   'residencia': 1000,
 };
 
-function getDeviceTagMap(cups) {
-  return database.query(
-    `SELECT d.id, d.shelly_device_id
-     FROM devices d
-     JOIN users u ON d.user_id = u.id::text
-     WHERE u.cups = $1`,
-    [cups]
-  ).then((result) => {
-    const deviceTagMap = {};
-    for (const d of result.rows) {
-      const sid = d.shelly_device_id || '';
-      const parts = sid.split('/');
-      let tag;
-      if (parts.length === 1) tag = 'total';
-      else if (parts[0] === 'BombaDepuradora') tag = 'depuradora';
-      else if (parts[0] === 'BombaNet') tag = 'bombaNet';
-      else if (parts[0] === 'CloradorSali') tag = 'clorador';
-      else tag = parts[0].toLowerCase();
-      deviceTagMap[d.id] = tag;
-    }
-    return deviceTagMap;
-  });
+/**
+ * Interpola lazy una sèrie acumulada (per device o generador) deduplicant per
+ * timestamp. Retorna una llista { ts, value } ordenada amb els valors corregits.
+ * Les files ja corregides a la BD (interpolated_at) no presenten plateaus i
+ * no es modifiquen. Per a sèries solars es passa la finestra de sol empírica
+ * perquè el salt es reparteixi només en hores de producció.
+ */
+function interpolateCumulative(rows, valueField, daylightWindow = null) {
+  const byTs = groupByTimestamp(rows);
+  const keys = [...byTs.keys()];
+  const series = keys.map(k => ({
+    timestamp: new Date(k),
+    value: parseFloat(byTs.get(k)[0][valueField]),
+  }));
+  const { records } = interpolateSeries(series, { daylightWindow });
+  return keys.map((k, i) => ({ ts: k, value: records[i].value }));
 }
 
 async function getStatisticsData({ from, to, cups }) {
@@ -56,14 +51,12 @@ async function getStatisticsData({ from, to, cups }) {
     [cups, fromTs, toTs]
   );
 
-  // Consum per device per dia = MAX(energia_total_wh) del dia - baseline (evita drops i acumulats)
-  const consumResult = await database.query(
-    `SELECT DATE(c.timestamp) as day, c.device_id,
-            MAX(c.energia_total_wh) as max_total, MIN(c.energia_total_wh) as min_total
+  // Sèrie acumulada completa per device dins del període, interpolada lazy
+  const consumSeriesResult = await database.query(
+    `SELECT c.timestamp, c.device_id, c.dispositiu, c.energia_total_wh
      FROM consums c
      WHERE c.cups = $1 AND c.timestamp >= $2 AND c.timestamp <= $3
-     GROUP BY DATE(c.timestamp), c.device_id
-     ORDER BY day, c.device_id`,
+     ORDER BY c.device_id, c.timestamp`,
     [cups, fromTs, toTs]
   );
 
@@ -76,86 +69,22 @@ async function getStatisticsData({ from, to, cups }) {
     [cups, fromTs]
   );
 
-  // Solar assignada per interval (share de l'usuari en Wh) des de balanc_energetic
-  const solarTsResult = await database.query(
-    `SELECT timestamp, generator_code, allocated_wh
-     FROM balanc_energetic
-     WHERE cups = $1 AND timestamp >= $2 AND timestamp <= $3`,
-    [cups, fromTs, toTs]
-  );
-
-  // Consum per interval (delta real del comptador principal Shelly EM)
-  const consumptionTsResult = await database.query(
-    `SELECT timestamp, energia_wh
-     FROM consums
-     WHERE cups = $1 AND dispositiu LIKE 'Shelly EM%'
-       AND timestamp >= $2 AND timestamp <= $3`,
-    [cups, fromTs, toTs]
-  );
-
-  // Import/export per dia = suma per interval de max(0, consum - solar) / max(0, solar - consum)
-  // (l'agregació diària max(0, consum_total - solar_total) emmascara els imports nocturns)
-  const solarByTs = {};
-  for (const row of solarTsResult.rows) {
-    const key = row.timestamp.toISOString().slice(0, 16);
-    const scale = generatorScales[row.generator_code] || 1;
-    solarByTs[key] = (solarByTs[key] || 0) + parseFloat(row.allocated_wh) * scale;
-  }
-
-  const consumByTs = {};
-  for (const row of consumptionTsResult.rows) {
-    const key = row.timestamp.toISOString().slice(0, 16);
-    consumByTs[key] = (consumByTs[key] || 0) + parseFloat(row.energia_wh);
-  }
-
-  const gridByDay = {};
-  const intervalKeys = new Set([...Object.keys(consumByTs), ...Object.keys(solarByTs)]);
-  for (const key of intervalKeys) {
-    const day = key.slice(0, 10);
-    const intervalConsum = consumByTs[key] || 0;
-    const intervalSolar = solarByTs[key] || 0;
-    if (!gridByDay[day]) gridByDay[day] = { import: 0, export: 0 };
-    if (intervalConsum > intervalSolar) gridByDay[day].import += intervalConsum - intervalSolar;
-    else gridByDay[day].export += intervalSolar - intervalConsum;
-  }
-
-  // Indexar solar per dia usant delta acumulat (com /solar), evitant el bootstrap inicial
-  const solarRowsResult = await database.query(
-    `SELECT b.timestamp, b.generator_code, b.generator_total_cumulative_wh, b.participation_pct
+  // Sèrie acumulada del generador dins del període, interpolada lazy
+  const solarSeriesResult = await database.query(
+    `SELECT b.timestamp, b.generator_code, b.generator_total_cumulative_wh,
+            b.generator_total_wh, b.participation_pct, b.interpolated_at
      FROM balanc_energetic b
      WHERE b.cups = $1 AND b.timestamp >= $2 AND b.timestamp <= $3
      ORDER BY b.generator_code, b.timestamp`,
     [cups, fromTs, toTs]
   );
 
-  const genPrev = {};
-  // Inicialitzar genPrev amb els valors baseline pre-període
-  for (const b of baselineResult.rows) {
-    genPrev[b.generator_code] = parseFloat(b.generator_total_cumulative_wh);
+  const consumByDevice = new Map();
+  for (const row of consumSeriesResult.rows) {
+    if (!consumByDevice.has(row.device_id)) consumByDevice.set(row.device_id, []);
+    consumByDevice.get(row.device_id).push(row);
   }
 
-  const solarByDay = {};
-  for (const row of solarRowsResult.rows) {
-    const day = row.timestamp.toISOString().slice(0, 10);
-    const genCode = row.generator_code;
-    const currVal = parseFloat(row.generator_total_cumulative_wh);
-    const pct = parseFloat(row.participation_pct);
-    const scale = generatorScales[genCode] || 1;
-
-    if (!solarByDay[day]) {
-      solarByDay[day] = { solar: 0, consumption: 0, balance: 0 };
-    }
-
-    if (genPrev[genCode] !== undefined) {
-      const delta = Math.max(0, currVal - genPrev[genCode]);
-      solarByDay[day].solar += delta * scale * (pct / 100);
-    }
-
-    genPrev[genCode] = Math.max(genPrev[genCode] || 0, currVal);
-  }
-
-  // Agrupar consum per dia amb breakdown per tag
-  const daysSet = new Set();
   const deviceTotals = {};
   const deviceBaselines = {};
 
@@ -170,31 +99,118 @@ async function getStatisticsData({ from, to, cups }) {
     }
   }
 
-  for (const c of consumResult.rows) {
-    const day = c.day.toISOString().slice(0, 10);
-    daysSet.add(day);
-    const deviceId = c.device_id;
-    const tag = deviceTagMap[deviceId] || 'unknown';
-    const maxTotal = parseFloat(c.max_total);
-    const minTotal = parseFloat(c.min_total);
+  // Consum per interval (delta real del comptador principal Shelly EM, sense sub-meters)
+  const consumByTs = {};
+  const daysSet = new Set();
 
-    let wh = 0;
-    const baseline = deviceBaselines[deviceId];
-    if (baseline !== undefined) {
-      if (maxTotal < baseline) {
-        // El comptador s'ha reiniciat (tot el dia queda per sota del baseline):
-        // re-baseline a la lectura mínima del dia i comptem només el moviment d'avui.
-        deviceBaselines[deviceId] = minTotal;
-        wh = Math.max(0, maxTotal - minTotal);
+  for (const [deviceId, rows] of consumByDevice) {
+    const tag = deviceTagMap[deviceId] || 'unknown';
+    const interpolated = interpolateCumulative(rows, 'energia_total_wh');
+    const isMainMeter = rows[0].dispositiu && String(rows[0].dispositiu).includes('Shelly EM');
+
+    const dayMax = {};
+    const dayMin = {};
+    let prevVal = null;
+
+    for (const { ts, value } of interpolated) {
+      const iso = new Date(ts).toISOString();
+      const key = iso.slice(0, 16);
+      const day = iso.slice(0, 10);
+      daysSet.add(day);
+
+      if (dayMax[day] === undefined) {
+        dayMax[day] = value;
+        dayMin[day] = value;
       } else {
-        wh = Math.max(0, maxTotal - baseline);
-        // Actualitzar baseline amb el màxim del dia (un drop transitori no reinicia el comptador)
-        deviceBaselines[deviceId] = Math.max(baseline, maxTotal);
+        if (value > dayMax[day]) dayMax[day] = value;
+        if (value < dayMin[day]) dayMin[day] = value;
       }
+
+      if (prevVal !== null) {
+        const delta = Math.max(0, Math.round((value - prevVal) * 100) / 100);
+        if (isMainMeter) {
+          consumByTs[key] = (consumByTs[key] || 0) + delta;
+        }
+      }
+      prevVal = value;
     }
 
-    if (!deviceTotals[tag]) deviceTotals[tag] = {};
-    deviceTotals[tag][day] = (deviceTotals[tag][day] || 0) + wh;
+    // Consum per device per dia = MAX del dia - baseline (mateixa lògica que abans,
+    // però sobre la sèrie acumulada ja interpolada)
+    for (const day of Object.keys(dayMax)) {
+      let wh = 0;
+      const baseline = deviceBaselines[deviceId];
+      if (baseline !== undefined) {
+        if (dayMax[day] < baseline) {
+          // El comptador s'ha reiniciat (tot el dia queda per sota del baseline)
+          deviceBaselines[deviceId] = dayMin[day];
+          wh = Math.max(0, dayMax[day] - dayMin[day]);
+        } else {
+          wh = Math.max(0, dayMax[day] - baseline);
+          deviceBaselines[deviceId] = Math.max(baseline, dayMax[day]);
+        }
+      }
+
+      if (!deviceTotals[tag]) deviceTotals[tag] = {};
+      deviceTotals[tag][day] = (deviceTotals[tag][day] || 0) + wh;
+    }
+  }
+
+  // Solar assignada per interval i per dia a partir de la sèrie interpolada del generador
+  const genPrev = {};
+  for (const b of baselineResult.rows) {
+    genPrev[b.generator_code] = parseFloat(b.generator_total_cumulative_wh);
+  }
+
+  const solarByGenerator = new Map();
+  for (const row of solarSeriesResult.rows) {
+    if (!solarByGenerator.has(row.generator_code)) solarByGenerator.set(row.generator_code, []);
+    solarByGenerator.get(row.generator_code).push(row);
+  }
+
+  const solarByTs = {};
+  const solarByDay = {};
+
+  for (const [genCode, rows] of solarByGenerator) {
+    // Finestra de sol empírica del generador a partir de les files netes del període
+    const daylightWindow = computeDaylightWindow(
+      rows.filter(r => !r.interpolated_at)
+    );
+    const interpolated = interpolateCumulative(rows, 'generator_total_cumulative_wh', daylightWindow);
+    const pct = parseFloat(rows[0].participation_pct);
+    const scale = generatorScales[genCode] || 1;
+    let prev = genPrev[genCode] !== undefined ? genPrev[genCode] : null;
+
+    for (const { ts, value } of interpolated) {
+      const iso = new Date(ts).toISOString();
+      const key = iso.slice(0, 16);
+      const day = iso.slice(0, 10);
+
+      if (!solarByDay[day]) {
+        solarByDay[day] = { solar: 0, consumption: 0, balance: 0 };
+      }
+
+      if (prev !== null) {
+        const delta = Math.max(0, Math.round((value - prev) * 100) / 100);
+        const allocated = Math.round(delta * (pct / 100) * 100) / 100;
+        solarByTs[key] = (solarByTs[key] || 0) + allocated * scale;
+        solarByDay[day].solar += delta * scale * (pct / 100);
+      }
+
+      prev = Math.max(prev === null ? value : prev, value);
+    }
+  }
+
+  // Import/export per dia = suma per interval de max(0, consum - solar) / max(0, solar - consum)
+  const gridByDay = {};
+  const intervalKeys = new Set([...Object.keys(consumByTs), ...Object.keys(solarByTs)]);
+  for (const key of intervalKeys) {
+    const day = key.slice(0, 10);
+    const intervalConsum = consumByTs[key] || 0;
+    const intervalSolar = solarByTs[key] || 0;
+    if (!gridByDay[day]) gridByDay[day] = { import: 0, export: 0 };
+    if (intervalConsum > intervalSolar) gridByDay[day].import += intervalConsum - intervalSolar;
+    else gridByDay[day].export += intervalSolar - intervalConsum;
   }
 
   // Construir intervals diaris
@@ -205,15 +221,12 @@ async function getStatisticsData({ from, to, cups }) {
   for (const day of sortedDays) {
     const devices = {};
 
-    // Omplir dispositius (sub-meters i total)
     for (const [tag, dayData] of Object.entries(deviceTotals)) {
       const wh = dayData[day] || 0;
       devices[tag] = Math.round(wh * 100) / 100;
       aggregatedDeviceTotals[tag] = (aggregatedDeviceTotals[tag] || 0) + wh;
     }
 
-    // El consum total ve del tag 'total' (Shelly EM = comptador principal)
-    // Si no hi ha tag 'total', fem la suma de tots els dispositius
     const consumption = deviceTotals.total && deviceTotals.total[day]
       ? deviceTotals.total[day]
       : Object.entries(deviceTotals)
@@ -270,6 +283,30 @@ async function getStatisticsData({ from, to, cups }) {
       devices: summaryDevices
     }
   };
+}
+
+async function getDeviceTagMap(cups) {
+  return database.query(
+    `SELECT d.id, d.shelly_device_id
+     FROM devices d
+     JOIN users u ON d.user_id = u.id::text
+     WHERE u.cups = $1`,
+    [cups]
+  ).then((result) => {
+    const deviceTagMap = {};
+    for (const d of result.rows) {
+      const sid = d.shelly_device_id || '';
+      const parts = sid.split('/');
+      let tag;
+      if (parts.length === 1) tag = 'total';
+      else if (parts[0] === 'BombaDepuradora') tag = 'depuradora';
+      else if (parts[0] === 'BombaNet') tag = 'bombaNet';
+      else if (parts[0] === 'CloradorSali') tag = 'clorador';
+      else tag = parts[0].toLowerCase();
+      deviceTagMap[d.id] = tag;
+    }
+    return deviceTagMap;
+  });
 }
 
 module.exports = { getStatisticsData };

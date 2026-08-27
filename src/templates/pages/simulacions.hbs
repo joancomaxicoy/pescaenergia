@@ -17,6 +17,7 @@
                 <option value="15">15 dies</option>
                 <option value="30" selected>30 dies</option>
                 <option value="90">90 dies</option>
+                <option value="custom">Personalitzat</option>
             </select>
             <label for="participationPct">Participació</label>
             <div class="sim-participation-control">
@@ -167,9 +168,19 @@
                 <span class="sim-kpi-sub">kWh/dia</span>
             </div>
             <div class="sim-kpi">
-                <span class="sim-kpi-label">Capacitat necessària</span>
+                <span class="sim-kpi-label">Capacitat recomanada</span>
                 <span class="sim-kpi-value" id="kpiBatteryRequired">--</span>
-                <span class="sim-kpi-sub">kWh per captar-ho tot</span>
+                <span class="sim-kpi-sub">import + eficiència (kWh)</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Càrrega inicial</span>
+                <span class="sim-kpi-value" id="kpiBatteryInitialSoc">--</span>
+                <span class="sim-kpi-sub">SOC a les 00:00</span>
+            </div>
+            <div class="sim-kpi">
+                <span class="sim-kpi-label">Cicle sostenible</span>
+                <span class="sim-kpi-value" id="kpiBatterySustainable">--</span>
+                <span class="sim-kpi-sub" id="kpiBatterySustainableSub">l'excedent compensa la import</span>
             </div>
             <div class="sim-kpi">
                 <span class="sim-kpi-label">Dies per omplir</span>
@@ -237,6 +248,11 @@
     </div>
 </div>
 
+<!-- Date Range Picker Component -->
+<date-range-picker id="simDateRangePicker" max-range-days="365"></date-range-picker>
+
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Date Range Picker Component -->
+<script src="/js/components/date-range-picker.js"></script>
 <script src="/js/grafics_dia_tipic.js"></script>

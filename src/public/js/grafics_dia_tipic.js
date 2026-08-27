@@ -6,12 +6,21 @@
 (function () {
   let chartInstances = {};
   let participationInitialized = false;
+  let appliedCustomRange = null;
+  let lastAppliedPeriod = '30';
 
   function formatKwh(wh) {
     if (wh === null || wh === undefined) return '--';
     var kwh = wh / 1000;
     if (kwh >= 1000) return Math.round(kwh).toLocaleString() + ' kWh';
     return kwh.toFixed(2) + ' kWh';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    var parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    return parts[2] + '/' + parts[1] + '/' + parts[0];
   }
 
   function formatPct(v) {
@@ -94,7 +103,13 @@
     }
     setKpi('kpiBatteryImport', s.totalImportKwh !== undefined ? s.totalImportKwh.toFixed(2) : '--');
     setKpi('kpiBatteryExport', s.totalExportKwh !== undefined ? s.totalExportKwh.toFixed(2) : '--');
-    setKpi('kpiBatteryRequired', s.requiredCapacityKwh !== undefined ? s.requiredCapacityKwh.toFixed(2) : '--');
+    setKpi('kpiBatteryRequired', s.recommendedCapacityKwh !== undefined ? s.recommendedCapacityKwh.toFixed(2) : '--');
+    setKpi('kpiBatteryInitialSoc', s.initialSocPct !== undefined ? s.initialSocPct + '%' : '--');
+    setKpi('kpiBatterySustainable', s.sustainable !== undefined ? (s.sustainable ? 'Sí' : 'No') : '--');
+    var sustainableSub = document.getElementById('kpiBatterySustainableSub');
+    if (sustainableSub && s.sustainable === false && s.sustainableCoveragePct !== undefined) {
+      sustainableSub.textContent = 'només cobreix el ' + s.sustainableCoveragePct + '% de la import';
+    }
     setKpi('kpiBatteryFillDays', s.fillDays !== null && s.fillDays !== undefined ? s.fillDays.toFixed(1) : '--');
   }
 
@@ -287,9 +302,14 @@
     var container = document.getElementById('simContainer');
     if (!container) return;
     var cups = container.dataset.cups;
-    var days = document.getElementById('periodSelect').value || '30';
+    var period = document.getElementById('periodSelect').value || '30';
 
-    var params = 'cups=' + encodeURIComponent(cups) + '&days=' + encodeURIComponent(days);
+    var params = 'cups=' + encodeURIComponent(cups);
+    if (period === 'custom' && appliedCustomRange) {
+      params += '&from=' + encodeURIComponent(appliedCustomRange.from) + '&to=' + encodeURIComponent(appliedCustomRange.to);
+    } else {
+      params += '&days=' + encodeURIComponent(period);
+    }
     var batteryKwh = document.getElementById('batteryKwh');
     var batteryKw = document.getElementById('batteryKw');
     var batteryEfficiency = document.getElementById('batteryEfficiency');
@@ -314,7 +334,7 @@
         renderProfileCharts(data.profile);
         renderBatterySummary(data.battery);
         renderBatteryChart(data.profile, data.battery);
-        setKpi('simPeriod', data.period ? data.period.from + ' → ' + data.period.to : '');
+        setKpi('simPeriod', data.period ? formatDate(data.period.from) + ' → ' + formatDate(data.period.to) : '');
       })
       .catch(function (err) {
         console.error('Error carregant dia típic:', err);
@@ -326,9 +346,40 @@
     var container = document.getElementById('simContainer');
     if (!container) return;
     var periodSelect = document.getElementById('periodSelect');
+    var dateRangePicker = document.getElementById('simDateRangePicker');
+
     if (periodSelect) {
-      periodSelect.addEventListener('change', loadData);
+      periodSelect.addEventListener('change', function () {
+        if (periodSelect.value === 'custom') {
+          if (dateRangePicker) {
+            dateRangePicker.open();
+          }
+          periodSelect.value = lastAppliedPeriod;
+          return;
+        }
+        lastAppliedPeriod = periodSelect.value;
+        loadData();
+      });
     }
+
+    if (dateRangePicker) {
+      dateRangePicker.addEventListener('date-range-selected', function (event) {
+        var startDate = event.detail.startDate;
+        var endDate = event.detail.endDate;
+        if (!startDate || !endDate) return;
+        appliedCustomRange = { from: startDate, to: endDate };
+        lastAppliedPeriod = 'custom';
+        var customOption = periodSelect ? periodSelect.querySelector('option[value="custom"]') : null;
+        if (customOption) {
+          customOption.textContent = 'Personalitzat (' + formatDate(startDate) + ' - ' + formatDate(endDate) + ')';
+        }
+        if (periodSelect) {
+          periodSelect.value = 'custom';
+        }
+        loadData();
+      });
+    }
+
     ['batteryKwh', 'batteryKw', 'batteryEfficiency'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.addEventListener('change', loadData);

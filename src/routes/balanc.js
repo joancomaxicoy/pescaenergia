@@ -34,7 +34,10 @@ function toSlot(date) {
 function mode(values) {
   if (!values || values.length === 0) return 0;
   const counts = new Map();
-  for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+  for (const v of values) {
+    const rounded = Math.round(v * 10) / 10;
+    counts.set(rounded, (counts.get(rounded) || 0) + 1);
+  }
   let bestValue = values[0];
   let bestCount = 0;
   for (const [v, c] of counts) {
@@ -43,7 +46,7 @@ function mode(values) {
       bestValue = v;
     }
   }
-  return Math.round(bestValue * 100) / 100;
+  return bestValue;
 }
 
 function mean(values) {
@@ -60,17 +63,33 @@ function simulateBattery(profile, params) {
   const minWh = capacityWh * params.minSoc;
   const maxWh = capacityWh * params.maxSoc;
 
-  let soc = capacityWh * params.startSoc;
-  let running = 0;
-  let requiredCapacityWh = 0;
+  // Primera passada: balanç acumulat per trobar la càrrega inicial
   let totalSurplus = 0;
   let totalDeficit = 0;
-
-  const slots = profile.map((p) => {
+  let running = 0;
+  let requiredCapacityWh = 0;
+  let cumulative = 0;
+  let minCumulative = 0;
+  for (const p of profile) {
     const surplus = Math.max(0, p.generation_mode - p.consumption_mode);
     const deficit = Math.max(0, p.consumption_mode - p.generation_mode);
     totalSurplus += surplus;
     totalDeficit += deficit;
+    cumulative += surplus - deficit;
+    if (cumulative < minCumulative) minCumulative = cumulative;
+    running = Math.max(0, running + surplus - deficit);
+    requiredCapacityWh = Math.max(requiredCapacityWh, running);
+  }
+
+  // Càrrega inicial: energia neta consumida de nit fins al punt d'autosuficiència
+  // (on el balanç acumulat torna a zero), ajustada per l'eficiència i per sobre del SOC mínim
+  const nightStoredWh = Math.max(0, -minCumulative) / params.efficiency;
+  const initialStoredWh = Math.min(maxWh, minWh + nightStoredWh);
+  let soc = initialStoredWh;
+
+  const slots = profile.map((p) => {
+    const surplus = Math.max(0, p.generation_mode - p.consumption_mode);
+    const deficit = Math.max(0, p.consumption_mode - p.generation_mode);
 
     const chargeWh = Math.min(surplus, maxFlowWh, Math.max(0, maxWh - soc));
     soc += chargeWh;
@@ -84,9 +103,6 @@ function simulateBattery(profile, params) {
     const dischargeWh = dischargeStored * params.efficiency;
     soc -= dischargeStored;
     const importWh = Math.max(0, deficit - dischargeWh);
-
-    running = Math.max(0, running + surplus - deficit);
-    requiredCapacityWh = Math.max(requiredCapacityWh, running);
 
     return {
       slot: p.slot,
@@ -123,6 +139,14 @@ function simulateBattery(profile, params) {
     ? round(((totalGenerationDay - totalExport) / totalGenerationDay) * 100)
     : 0;
 
+  // El cicle és sostenible si l'excedent (descomptant l'eficiència) cobreix la importació
+  const sustainable = totalDeficit > 0
+    ? totalSurplus * params.efficiency >= totalDeficit
+    : true;
+  const sustainableCoveragePct = sustainable
+    ? (totalDeficit > 0 ? round((totalDischarge / totalDeficit) * 100) : 100)
+    : (totalDeficit > 0 ? round((totalSurplus * params.efficiency / totalDeficit) * 100) : 100);
+
   return {
     params,
     slots,
@@ -139,6 +163,11 @@ function simulateBattery(profile, params) {
       autoconsumConsPctNoBattery,
       autoconsumGenPct,
       requiredCapacityKwh: round(requiredCapacityWh / 1000),
+      nightCapacityKwh: round(nightStoredWh / 1000),
+      recommendedCapacityKwh: totalDeficit > 0 ? round((totalDeficit / params.efficiency) / 1000) : 0,
+      initialSocPct: Math.round((initialStoredWh / capacityWh) * 1000) / 10,
+      sustainable,
+      sustainableCoveragePct,
       maxSocPct: socPcts.length > 0 ? Math.max(...socPcts) : 0,
       minSocPct: socPcts.length > 0 ? Math.min(...socPcts) : 0,
       endSocPct: socPcts.length > 0 ? socPcts[socPcts.length - 1] : 0,
@@ -150,6 +179,7 @@ function simulateBattery(profile, params) {
 router.get('/dia-tipic', asyncHandler(async (req, res) => {
   try {
     const { cups, days } = req.query;
+    const { from, to } = req.query;
     if (!cups) {
       return res.status(400).json({
         error: 'Cal el paràmetre cups',
@@ -157,9 +187,18 @@ router.get('/dia-tipic', asyncHandler(async (req, res) => {
       });
     }
 
-    const requestedDays = Math.min(Math.max(parseInt(days) || 30, 1), 365);
-    const toDate = new Date().toISOString().slice(0, 10);
-    const fromTs = new Date(Date.parse(`${toDate}T00:00:00Z`) - requestedDays * 86400000).toISOString();
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    let fromDate;
+    let toDate;
+    if (from && to && DATE_RE.test(from) && DATE_RE.test(to)) {
+      fromDate = from;
+      toDate = to;
+    } else {
+      const requestedDays = Math.min(Math.max(parseInt(days) || 30, 1), 365);
+      toDate = new Date().toISOString().slice(0, 10);
+      fromDate = new Date(Date.parse(`${toDate}T00:00:00Z`) - requestedDays * 86400000).toISOString().slice(0, 10);
+    }
+    const fromTs = `${fromDate} 00:00:00+00`;
     const toTs = `${toDate} 23:59:59+00`;
 
     const parsedSimPct = parseFloat(req.query.simulationPct);
@@ -253,7 +292,6 @@ router.get('/dia-tipic', asyncHandler(async (req, res) => {
       efficiency: Math.min(1, Math.max(0.5, parseFloat(req.query.batteryEfficiency) || 0.9)),
       minSoc: 0.2,
       maxSoc: 1,
-      startSoc: 0.5,
     };
 
     const battery = simulateBattery(profile, batteryParams);
@@ -276,7 +314,7 @@ router.get('/dia-tipic', asyncHandler(async (req, res) => {
     res.json({
       cups,
       timezone: TIMEZONE,
-      period: { from: fromTs.slice(0, 10), to: toDate, days: daysCount },
+      period: { from: fromDate, to: toDate, days: daysCount },
       participation: {
         actual: participationGenerators,
         currentPct,
