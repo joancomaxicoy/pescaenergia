@@ -27,6 +27,7 @@ class CompactorService {
       errors: 0,
       lastError: null,
       filteredSamples: 0,
+      counterResetsRebaselined: 0,
       startTime: Date.now()
     };
     
@@ -37,6 +38,12 @@ class CompactorService {
     // Els comptadors acumulatius mai han de baixar: qualsevol mostra per sota
     // del màxim ja conegut es considera esporàdica i es descarta.
     this.counterRunningMax = new Map();
+
+    // Confirmació de reset de comptador: si durant N cicles consecutius TOTES
+    // les mostres estan per sota del running max, es tracta d'un reinici real
+    // del comptador (no d'un error de lectura puntual) i es fa re-baseline.
+    this.resetCandidates = new Map(); // deviceUuid|metricName -> { consecutiveBelow }
+    this.resetConfirmCycles = parseInt(process.env.COMPACTOR_RESET_CONFIRM_CYCLES) || 3;
   }
 
   /**
@@ -263,6 +270,7 @@ class CompactorService {
     const timeSeriesMetrics = new Map();
     const stateMetrics = [];
     const ignoredMetrics = [];
+    const counterBuckets = new Map();
 
     for (const metric of metrics) {
       const { metricName, value, unit } = metric;
@@ -283,24 +291,14 @@ class CompactorService {
             continue;
           }
 
-          // Els comptadors acumulatius mai han de baixar: descartar qualsevol
-          // mostra per sota del màxim ja conegut (sense finestra temporal).
+          // Comptadors acumulatius: acumular tots els valors del cicle i
+          // decidir el filtre / re-baseline després de recórrer el buffer.
           if (this.isCumulativeCounter(metricName)) {
-            const counterKey = `${deviceUuid}|${metricName}`;
-            const runningMax = this.counterRunningMax.get(counterKey);
-            if (runningMax !== null && runningMax !== undefined && value < runningMax) {
-              this.stats.filteredSamples++;
-              logger.debug('Mostra per sota del running max descartada', {
-                deviceUuid,
-                metricName,
-                value,
-                runningMax
-              });
-              continue;
+            if (!counterBuckets.has(metricName)) {
+              counterBuckets.set(metricName, { values: [], unit });
             }
-            if (runningMax === null || runningMax === undefined || value > runningMax) {
-              this.counterRunningMax.set(counterKey, value);
-            }
+            counterBuckets.get(metricName).values.push(value);
+            break;
           }
 
           if (!timeSeriesMetrics.has(metricName)) {
@@ -339,24 +337,13 @@ class CompactorService {
           
           // Tratar como serie temporal por defecto si es numérica
           if (typeof value === 'number' && !isNaN(value)) {
-            // Els comptadors acumulatius mai han de baixar: mateix filtre
-            // que al cas 'timeseries' (cobreix mètriques fora de config).
+            // Comptadors acumulatius: mateix tractament que al cas 'timeseries'
             if (this.isCumulativeCounter(metricName)) {
-              const counterKey = `${deviceUuid}|${metricName}`;
-              const runningMax = this.counterRunningMax.get(counterKey);
-              if (runningMax !== null && runningMax !== undefined && value < runningMax) {
-                this.stats.filteredSamples++;
-                logger.debug('Mostra per sota del running max descartada (unknown)', {
-                  deviceUuid,
-                  metricName,
-                  value,
-                  runningMax
-                });
-                continue;
+              if (!counterBuckets.has(metricName)) {
+                counterBuckets.set(metricName, { values: [], unit });
               }
-              if (runningMax === null || runningMax === undefined || value > runningMax) {
-                this.counterRunningMax.set(counterKey, value);
-              }
+              counterBuckets.get(metricName).values.push(value);
+              break;
             }
 
             if (!timeSeriesMetrics.has(metricName)) {
@@ -370,6 +357,95 @@ class CompactorService {
             timeSeriesMetrics.get(metricName).count++;
           }
           break;
+      }
+    }
+
+    // Processar comptadors acumulatius: filtre anti-esporàdic amb confirmació
+    // de reset. Si durant N cicles consecutius TOTES les mostres estan per sota
+    // del running max, es re-baseline (el comptador s'ha reiniciat de veritat,
+    // no és un error de lectura puntual).
+    for (const [metricName, bucket] of counterBuckets) {
+      const { values, unit } = bucket;
+      const counterKey = `${deviceUuid}|${metricName}`;
+      const runningMax = this.counterRunningMax.get(counterKey);
+
+      if (runningMax === null || runningMax === undefined) {
+        // Sense referència prèvia: acceptar totes les mostres com a baseline
+        this.counterRunningMax.set(counterKey, Math.max(...values));
+        this.resetCandidates.delete(counterKey);
+        if (!timeSeriesMetrics.has(metricName)) {
+          timeSeriesMetrics.set(metricName, { values: [], unit, count: 0 });
+        }
+        const group = timeSeriesMetrics.get(metricName);
+        group.values.push(...values);
+        group.count += values.length;
+        continue;
+      }
+
+      const bucketMax = Math.max(...values);
+      const allBelow = bucketMax < runningMax;
+      const candidate = this.resetCandidates.get(counterKey) || { consecutiveBelow: 0 };
+
+      if (allBelow) {
+        // Possible reset: confirmar en pròxims cicles abans de re-baseline
+        candidate.consecutiveBelow++;
+        this.resetCandidates.set(counterKey, candidate);
+
+        if (candidate.consecutiveBelow >= this.resetConfirmCycles) {
+          this.counterRunningMax.set(counterKey, bucketMax);
+          this.resetCandidates.delete(counterKey);
+          this.stats.counterResetsRebaselined++;
+          logger.warn('Reset de comptador confirmat, re-baseline del running max', {
+            deviceUuid,
+            metricName,
+            prevMax: runningMax,
+            newBaseline: bucketMax,
+            confirmCycles: candidate.consecutiveBelow
+          });
+          if (!timeSeriesMetrics.has(metricName)) {
+            timeSeriesMetrics.set(metricName, { values: [], unit, count: 0 });
+          }
+          const group = timeSeriesMetrics.get(metricName);
+          group.values.push(...values);
+          group.count += values.length;
+        } else {
+          this.stats.filteredSamples += values.length;
+          logger.debug('Mostres per sota del running max descartades (pendent confirmació)', {
+            deviceUuid,
+            metricName,
+            value: bucketMax,
+            runningMax,
+            consecutiveBelow: candidate.consecutiveBelow,
+            confirmCycles: this.resetConfirmCycles
+          });
+        }
+      } else {
+        // Barreja de mostres al cicle: no és un reset consistent, filtrar les
+        // mostres esporàdiques que cauen per sota del màxim.
+        this.resetCandidates.delete(counterKey);
+        const validValues = values.filter(v => v >= runningMax);
+        const filtered = values.length - validValues.length;
+        if (filtered > 0) {
+          this.stats.filteredSamples += filtered;
+          logger.debug('Mostres esporàdiques per sota del running max descartades', {
+            deviceUuid,
+            metricName,
+            filtered,
+            runningMax
+          });
+        }
+        if (validValues.length > 0) {
+          if (!timeSeriesMetrics.has(metricName)) {
+            timeSeriesMetrics.set(metricName, { values: [], unit, count: 0 });
+          }
+          const group = timeSeriesMetrics.get(metricName);
+          group.values.push(...validValues);
+          group.count += validValues.length;
+          const maxVal = Math.max(...validValues);
+          if (maxVal > runningMax) {
+            this.counterRunningMax.set(counterKey, maxVal);
+          }
+        }
       }
     }
 
@@ -591,6 +667,7 @@ class CompactorService {
       errors: 0,
       lastError: null,
       filteredSamples: 0,
+      counterResetsRebaselined: 0,
       startTime: Date.now()
     };
     

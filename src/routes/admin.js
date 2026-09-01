@@ -8,6 +8,7 @@ const CupsService = require('../services/cupsService');
 const emailService = require('../services/emailService');
 const configLoader = require('../utils/configLoader');
 const cryptoService = require('../services/cryptoService');
+const datadisService = require('../services/datadisService');
 const crypto = require('crypto');
 
 const router = express.Router();
@@ -1366,6 +1367,121 @@ router.post('/register',
       res.status(500).json({
         success: false,
         error: 'Error interno del servidor'
+      });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/admin/datadis/{userId}:
+ *   get:
+ *     summary: Consulta consum/generació d'un soci a l'API de Datadis per un període (solo admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data inici (YYYY-MM-DD)
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data fi (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: Dades de Datadis del soci
+ *       400:
+ *         description: Dades invàlides o soci sense CUPS/DNI/clau Datadis
+ *       401:
+ *         description: No autenticat
+ *       403:
+ *         description: No autoritzat
+ */
+router.get('/datadis/:userId',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      if (!database.pool) {
+        await database.connect();
+      }
+
+      const { userId } = req.params;
+      const { from, to } = req.query;
+
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!from || !to || !dateRegex.test(from) || !dateRegex.test(to)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Cal indicar les dates \'from\' i \'to\' en format YYYY-MM-DD'
+        });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'Soci no trobat'
+        });
+      }
+
+      if (!user.cups) {
+        return res.status(400).json({
+          success: false,
+          error: "El soci no té CUPS assignat"
+        });
+      }
+      if (!user.dni) {
+        return res.status(400).json({
+          success: false,
+          error: "El soci no té DNI/NIE enregistrat"
+        });
+      }
+      if (!user.clau_datadis) {
+        return res.status(400).json({
+          success: false,
+          error: "El soci no té la clau d'accés a Datadis enregistrada"
+        });
+      }
+
+      const clauDatadis = cryptoService.decrypt(user.clau_datadis);
+
+      const data = await datadisService.getSociConsumption({
+        userId,
+        dni: user.dni,
+        password: clauDatadis,
+        cups: user.cups,
+        from,
+        to,
+        pool: database.pool,
+      });
+
+      res.json({ success: true, data });
+    } catch (error) {
+      if (error instanceof datadisService.DatadisError) {
+        return res.status(400).json({
+          success: false,
+          code: error.code,
+          error: error.message
+        });
+      }
+      logger.error('Error consultant Datadis per soci:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error intern del servidor'
       });
     }
   }

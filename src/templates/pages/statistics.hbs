@@ -14,6 +14,9 @@
             <button class="btn-stats btn-success-stats" onclick="generatePDF()">
                 Generar PDF
             </button>
+            <button class="btn-stats btn-info-stats" onclick="generateStatisticsExcel()">
+                Descarregar Excel
+            </button>
             <button class="btn-stats btn-primary-stats" onclick="showEmailModal()">
                 Enviar per mail
             </button>
@@ -272,7 +275,7 @@
 <div class="stats-modal-overlay" id="emailModal">
     <div class="stats-modal">
         <h2>Enviar informe per email</h2>
-        <p style="color: #666; margin-bottom: 20px;">L'informe s'enviara en format PDF amb les estadistiques seleccionades.</p>
+        <p style="color: #666; margin-bottom: 20px;">L'informe s'enviarà amb el resum (PDF) i el desglossament en Excel adjunts.</p>
         <div class="stats-form-group">
             <label>Email destinatari</label>
             <input type="email" id="emailInput" placeholder="exemple@domini.com">

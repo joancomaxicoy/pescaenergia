@@ -27,6 +27,7 @@ const consumtionsRoutes = require('./routes/consumtions');
 const balancRoutes = require('./routes/balanc');
 const statisticsRoutes = require('./routes/statistics');
 const energyMetricsRoutes = require('./routes/energyMetrics');
+const datadisRoutes = require('./routes/datadisRoutes');
 
 class ExpressApp {
   constructor() {
@@ -364,6 +365,7 @@ class ExpressApp {
     this.app.use('/api/balanc', balancRoutes);
     this.app.use('/api/statistics', statisticsRoutes);
     this.app.use('/api/energy-metrics', energyMetricsRoutes);
+    this.app.use('/api/datadis', datadisRoutes);
 
     // Rutas del frontend (área de usuario)
     this.app.use('/area-usuari', frontendRoutes);

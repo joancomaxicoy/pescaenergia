@@ -1,8 +1,9 @@
 const express = require('express');
 const database = require('../utils/database');
 const logger = require('../utils/logger');
-const { getStatisticsData } = require('../services/statisticsService');
+const { getStatisticsData, getBalanceData } = require('../services/statisticsService');
 const { generateReportPdf } = require('../services/reportService');
+const { generateStatisticsExcel, XLSX_CONTENT_TYPE } = require('../services/statisticsExcelService');
 const emailService = require('../services/emailService');
 
 const router = express.Router();
@@ -258,93 +259,10 @@ router.get('/balance', asyncHandler(async (req, res) => {
       });
     }
 
-    const toDate = to || new Date().toISOString().slice(0, 10);
-    const fromTs = `${from} 00:00:00+00`;
-    const toTs = `${toDate} 23:59:59+00`;
-
-    // Map device_id → tag per aquest CUPS
-    const deviceMapResult = await database.query(
-      `SELECT d.id, d.shelly_device_id
-       FROM devices d
-       JOIN users u ON d.user_id = u.id::text
-       WHERE u.cups = $1`,
-      [cups]
-    );
-
-    const deviceTagMap = {};
-    for (const d of deviceMapResult.rows) {
-      const sid = d.shelly_device_id || '';
-      const parts = sid.split('/');
-      let tag;
-      if (parts.length === 1) tag = 'total';
-      else if (parts[0] === 'BombaDepuradora') tag = 'depuradora';
-      else if (parts[0] === 'BombaNet') tag = 'bombaNet';
-      else if (parts[0] === 'CloradorSali') tag = 'clorador';
-      else tag = parts[0].toLowerCase();
-      deviceTagMap[d.id] = tag;
-    }
-
-    const generatorScales = {
-      'giravolt': 100,
-      'sala-polivalent': 1000,
-      'residencia': 1000,
-    };
-
-    // Solar i consum total per interval (15 min) des de balanc_energetic
-    const balancResult = await database.query(
-      `SELECT timestamp, generator_code, allocated_wh, consumption_wh
-       FROM balanc_energetic
-       WHERE cups = $1 AND timestamp >= $2 AND timestamp <= $3`,
-      [cups, fromTs, toTs]
-    );
-
-    // Consum per aparell per interval (15 min) des de consums
-    const consumTsResult = await database.query(
-      `SELECT timestamp, device_id, energia_wh
-       FROM consums
-       WHERE cups = $1 AND timestamp >= $2 AND timestamp <= $3`,
-      [cups, fromTs, toTs]
-    );
-
-    const byTs = {};
-    for (const row of balancResult.rows) {
-      const key = row.timestamp.toISOString();
-      if (!byTs[key]) byTs[key] = { solar: 0, consumption: null, devices: {} };
-      const scale = generatorScales[row.generator_code] || 1;
-      byTs[key].solar += parseFloat(row.allocated_wh) * scale;
-      byTs[key].consumption = parseFloat(row.consumption_wh);
-    }
-
-    for (const row of consumTsResult.rows) {
-      const key = row.timestamp.toISOString();
-      if (!byTs[key]) byTs[key] = { solar: 0, consumption: null, devices: {} };
-      const tag = deviceTagMap[row.device_id] || 'unknown';
-      byTs[key].devices[tag] = (byTs[key].devices[tag] || 0) + parseFloat(row.energia_wh);
-    }
-
-    const intervals = Object.keys(byTs).sort().map((key) => {
-      const d = byTs[key];
-      let consumption = d.consumption;
-      if (consumption === null) {
-        consumption = d.devices.total || Object.values(d.devices).reduce((s, v) => s + v, 0);
-      }
-      const solar = d.solar;
-      return {
-        date: key,
-        consumption: Math.round(consumption * 100) / 100,
-        solar: Math.round(solar * 100) / 100,
-        grid: Math.round(Math.max(0, consumption - solar) * 100) / 100,
-        export: Math.round(Math.max(0, solar - consumption) * 100) / 100,
-        devices: Object.fromEntries(
-          Object.entries(d.devices).map(([t, v]) => [t, Math.round(v * 100) / 100])
-        )
-      };
-    });
+    const result = await getBalanceData({ from, to, cups });
 
     res.json({
-      period: { from, to: toDate },
-      cups,
-      intervals,
+      ...result,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -409,17 +327,28 @@ router.post('/report', asyncHandler(async (req, res) => {
     const safeFrom = from.replace(/-/g, '');
     const safeTo = (to || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
     const filename = `informe-energetic-${safeFrom}-${safeTo}.pdf`;
+    const excelFilename = `informe-energetic-${safeFrom}-${safeTo}.xlsx`;
 
-    // Si ens passen un email, enviar per correu amb l'informe adjunt
+    // Si ens passen un email, enviar per correu amb el resum (PDF) i l'Excel adjunts
     if (email) {
+      const balance = await getBalanceData({ from, to, cups });
+      const excelBuffer = await generateStatisticsExcel({
+        period: result.period,
+        balance
+      });
+
       await emailService.sendReportEmail(email, {
         subject: `Informe energètic ${result.period.from} — ${result.period.to}`,
-        text: message || 'Tens adjunt l\'informe energètic sol·licitat.',
-        html: `<p>${(message || 'Tens adjunt l\'informe energètic sol·licitat.').replace(/\n/g, '<br>')}</p>`,
+        text: message || 'Tens adjunt l\'informe energètic sol·licitat (resum en PDF i desglossament en Excel).',
+        html: `<p>${(message || 'Tens adjunt l\'informe energètic sol·licitat (resum en PDF i desglossament en Excel).').replace(/\n/g, '<br>')}</p>`,
         attachments: [
           {
             filename,
             content: pdfBuffer
+          },
+          {
+            filename: excelFilename,
+            content: excelBuffer
           }
         ]
       });
@@ -429,6 +358,7 @@ router.post('/report', asyncHandler(async (req, res) => {
         sent: true,
         email,
         filename,
+        excelFilename,
         timestamp: new Date().toISOString()
       });
     }
@@ -441,6 +371,43 @@ router.post('/report', asyncHandler(async (req, res) => {
     logger.error('Error generant informe:', { error: error.message });
     res.status(500).json({
       error: 'Error generant l\'informe',
+      details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+      timestamp: new Date().toISOString()
+    });
+  }
+}));
+
+// Genera el desglossament i el balanç energètic en Excel
+router.post('/excel', asyncHandler(async (req, res) => {
+  try {
+    const { from, to, cups } = req.body || {};
+
+    if (!from || !cups) {
+      return res.status(400).json({
+        error: 'Calen els paràmetres from i cups',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const result = await getStatisticsData({ from, to, cups });
+    const balance = await getBalanceData({ from, to, cups });
+
+    const excelBuffer = await generateStatisticsExcel({
+      period: result.period,
+      balance
+    });
+
+    const safeFrom = from.replace(/-/g, '');
+    const safeTo = (to || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+    const filename = `informe-energetic-${safeFrom}-${safeTo}.xlsx`;
+
+    res.setHeader('Content-Type', XLSX_CONTENT_TYPE);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(excelBuffer);
+  } catch (error) {
+    logger.error('Error generant l\'informe Excel:', { error: error.message });
+    res.status(500).json({
+      error: 'Error generant l\'informe Excel',
       details: process.env.NODE_ENV !== 'production' ? error.message : undefined,
       timestamp: new Date().toISOString()
     });

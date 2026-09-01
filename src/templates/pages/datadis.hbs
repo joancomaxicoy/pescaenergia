@@ -1,0 +1,320 @@
+<link rel="stylesheet" href="/css/statistics.css">
+<link rel="stylesheet" href="/css/datadis.css">
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1 class="dashboard-title">Datadis</h1>
+        <p class="dashboard-subtitle">
+            Dades oficials de consum del teu subministrament
+            CUPS: <strong>{{user.cups}}</strong>
+        </p>
+    </div>
+
+    <!-- Selector de període -->
+    <div class="datadis-filters-panel" data-datadis-configured="{{datadisConfigured}}" data-user-name="{{user.name}}" data-user-email="{{user.email}}">
+        <div class="datadis-filters-grid">
+            <div class="datadis-filter-group">
+                <label>Periode</label>
+                <div class="datadis-date-row">
+                    <input type="date" id="datadisDateFrom">
+                    <span class="datadis-date-arrow">-></span>
+                    <input type="date" id="datadisDateTo">
+                </div>
+                <div class="datadis-quick-filters">
+                    <button class="datadis-quick-btn" data-days="7">Ultims 7 dies</button>
+                    <button class="datadis-quick-btn" data-days="15">15 dies</button>
+                    <button class="datadis-quick-btn active" data-days="30">30 dies</button>
+                    <button class="datadis-quick-btn" data-days="90">90 dies</button>
+                </div>
+            </div>
+
+            <div class="datadis-filter-group datadis-filter-actions">
+                <button class="btn btn-primary" id="datadisConsultBtn" onclick="loadDatadisData()">
+                    Consultar dades
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error -->
+    <div id="datadisError" class="datadis-alert datadis-alert-error" style="display: none;"></div>
+
+    <!-- Càrrega -->
+    <div id="datadisLoading" class="datadis-loading" style="display: none;">
+        <div class="datadis-spinner"></div>
+        <div>Consultant les dades de Datadis...</div>
+        <div class="datadis-loading-hint">Pot trigar una mica; la primera consulta pot tardar fins a un minut.</div>
+    </div>
+
+    <!-- Estat inicial / Sense credencials -->
+    <div id="datadisEmptyState" class="dashboard-content">
+        <div class="empty-state">
+            <div class="empty-state-icon"><i data-lucide="database"></i></div>
+            {{#unless datadisConfigured}}
+                <h2 class="empty-state-title">Credencials de Datadis pendents</h2>
+                <p class="empty-state-description">
+                    Necessites tenir el DNI/NIE i la clau d'accés a Datadis enregistrats
+                    per consultar aquí les dades oficials de consum.
+                    Contacta amb l'administrador.
+                </p>
+            {{else}}
+                <h2 class="empty-state-title">Selecciona un període</h2>
+                <p class="empty-state-description">
+                    Tria un període i prem "Consultar dades" per veure el teu consum
+                    segons les dades oficials de Datadis.
+                </p>
+            {{/unless}}
+        </div>
+    </div>
+
+    <!-- Resultats -->
+    <div id="datadisResults" style="display: none;">
+        <div class="datadis-info-actions">
+            <button class="btn-stats btn-success-stats" onclick="generateDatadisPDF()">
+                Generar PDF
+            </button>
+            <button class="btn-stats btn-info-stats" onclick="generateDatadisExcel()">
+                Descarregar Excel
+            </button>
+            <button class="btn-stats btn-primary-stats" onclick="showEmailModal()">
+                Enviar per mail
+            </button>
+        </div>
+        <div class="datadis-info" id="datadisInfo"></div>
+
+        <!-- Cartes KPI (mateix format que Estadistiques) -->
+        <div class="stats-kpi-grid">
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-label">
+                    Consum Total
+                    <button type="button" class="kpi-info" aria-label="Mes informacio sobre el consum total">
+                        <span class="kpi-info-icon">i</span>
+                        <span class="kpi-info-popup">Total d'energia consumida durant el periode (en kWh): energia de xarxa importada + energia solar aprofitada (autoconsum).</span>
+                    </button>
+                </div>
+                <div class="stats-kpi-value" id="datadisCardConsumption" style="color: #1a1a2e;">--</div>
+                <div class="stats-kpi-sub">kWh al periode</div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-label">
+                    Generacio
+                    <button type="button" class="kpi-info" aria-label="Mes informacio sobre la generacio">
+                        <span class="kpi-info-icon">i</span>
+                        <span class="kpi-info-popup">Energia generada durant el periode seleccionat (en kWh), segons les dades oficials d'autoconsum de Datadis.</span>
+                    </button>
+                </div>
+                <div class="stats-kpi-value" id="datadisCardGeneration" style="color: #ffd93d;">--</div>
+                <div class="stats-kpi-sub">kWh al periode</div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-label">
+                    Excedent
+                    <button type="button" class="kpi-info" aria-label="Mes informacio sobre l'excedent">
+                        <span class="kpi-info-icon">i</span>
+                        <span class="kpi-info-popup">Excedent d'energia generada que s'ha abocat a la xarxa durant el periode seleccionat (en kWh).</span>
+                    </button>
+                </div>
+                <div class="stats-kpi-value" id="datadisCardSurplus" style="color: #4a90d9;">--</div>
+                <div class="stats-kpi-sub">kWh al periode</div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-label">
+                    Autoconsum
+                    <button type="button" class="kpi-info" aria-label="Mes informacio sobre l'autoconsum">
+                        <span class="kpi-info-icon">i</span>
+                        <span class="kpi-info-popup">Energia generada i consumida directament a la instal·lacio durant el periode seleccionat (en kWh).</span>
+                    </button>
+                </div>
+                <div class="stats-kpi-value" id="datadisCardSelfConsumption" style="color: #4ecdc4;">--</div>
+                <div class="stats-kpi-sub">kWh al periode</div>
+            </div>
+        </div>
+
+        <!-- Gràfiques -->
+        <div class="stats-charts-grid">
+            <div class="stats-chart-container">
+                <h3>Consum (evolució temporal)</h3>
+                <canvas id="datadisConsumptionChart"></canvas>
+            </div>
+            <div class="stats-chart-container">
+                <h3>Resum Solar i Xarxa</h3>
+                <div class="stats-donuts">
+                    <div class="stats-donut">
+                        <h4>Origen del consum</h4>
+                        <div class="stats-donut-wrap">
+                            <canvas id="datadisSolarMixChart"></canvas>
+                            <div class="stats-donut-center">
+                                <span class="stats-donut-center-value" id="datadisSolarMixCenterValue">--</span>
+                                <span class="stats-donut-center-label">d'autoconsum</span>
+                            </div>
+                        </div>
+                        <div class="stats-donut-legend" id="datadisSolarMixLegend"></div>
+                    </div>
+                    <div class="stats-donut">
+                        <h4>Us de la generacio</h4>
+                        <div class="stats-donut-wrap">
+                            <canvas id="datadisGenerationUseChart"></canvas>
+                            <div class="stats-donut-center">
+                                <span class="stats-donut-center-value" id="datadisGenerationUseCenterValue">--</span>
+                                <span class="stats-donut-center-label">d'aprofitament solar</span>
+                            </div>
+                        </div>
+                        <div class="stats-donut-legend" id="datadisGenerationUseLegend"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="stats-chart-container stats-chart-full">
+                <h3>Balanç energètic</h3>
+                <canvas id="datadisBalanceChart"></canvas>
+            </div>
+        </div>
+
+        <div class="stats-summary-section">
+            <h3>Resum del període</h3>
+            <div class="stats-summary-grid">
+                <div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Consum total</span>
+                        <span class="stats-summary-value" id="datadisSumConsumption">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Energia de xarxa</span>
+                        <span class="stats-summary-value" id="datadisSumGrid">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Energia del sol</span>
+                        <span class="stats-summary-value" id="datadisSumSolarUsed" style="color: #8bc34a;">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Percentatge d'autoconsum solar</span>
+                        <span class="stats-summary-value" id="datadisSumSelfConsumption">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Dies analitzats</span>
+                        <span class="stats-summary-value" id="datadisSumDays">--</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Generació solar</span>
+                        <span class="stats-summary-value" id="datadisSumSolar">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Energia aprofitada</span>
+                        <span class="stats-summary-value" id="datadisSumSolarAprofitada">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Excedent energètic</span>
+                        <span class="stats-summary-value" id="datadisSumExport" style="color: #4a90d9;">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Percentatge de solar aprofitada</span>
+                        <span class="stats-summary-value" id="datadisSumSolarUsedPct">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Estalvi de CO2</span>
+                        <span class="stats-summary-value" id="datadisSumCo2">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <h3>Mitjana diària</h3>
+            <div class="stats-summary-grid">
+                <div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Consum mitjà diari</span>
+                        <span class="stats-summary-value" id="datadisAvgConsumption">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Energia de xarxa diària</span>
+                        <span class="stats-summary-value" id="datadisAvgGrid">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Energia del sol diària</span>
+                        <span class="stats-summary-value" id="datadisAvgSolarUsed" style="color: #8bc34a;">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Percentatge d'autoconsum solar</span>
+                        <span class="stats-summary-value" id="datadisAvgSelfConsumption">--</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Generació solar diària</span>
+                        <span class="stats-summary-value" id="datadisAvgSolar">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Energia aprofitada diària</span>
+                        <span class="stats-summary-value" id="datadisAvgSolarAprofitada">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Excedent energètic diari</span>
+                        <span class="stats-summary-value" id="datadisAvgExport" style="color: #4a90d9;">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Percentatge de solar aprofitada</span>
+                        <span class="stats-summary-value" id="datadisAvgSolarUsedPct">--</span>
+                    </div>
+                    <div class="stats-summary-item">
+                        <span class="stats-summary-label">Estalvi de CO2 diari</span>
+                        <span class="stats-summary-value" id="datadisAvgCo2">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="datadis-table-panel datadis-collapsible">
+            <button type="button" class="datadis-collapse-toggle" id="datadisCollapseToggle" aria-expanded="false">
+                <span class="datadis-collapse-arrow">&#9654;</span>
+                Desglossament horari
+            </button>
+            <div class="datadis-table-wrap" id="datadisTableWrap" style="display: none;">
+                <table class="datadis-table" id="datadisTable">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Consum</th>
+                            <th>Excedent</th>
+                            <th>Generació</th>
+                            <th>Autoconsum</th>
+                            <th>Obtenció</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <p class="datadis-note">
+                Dades facilitades per la distribuïdora a través de Datadis. Els valors s'actualitzen segons la disponibilitat.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Email Modal -->
+<div class="stats-modal-overlay" id="emailModal">
+    <div class="stats-modal">
+        <h2>Enviar informe per email</h2>
+        <p style="color: #666; margin-bottom: 20px;">L'informe s'enviarà amb el resum (PDF) i el desglossament horari (Excel) adjunts.</p>
+        <div class="stats-form-group">
+            <label>Email destinatari</label>
+            <input type="email" id="emailInput" placeholder="exemple@domini.com">
+        </div>
+        <div class="stats-form-group">
+            <label>Missatge (opcional)</label>
+            <input type="text" id="emailMessage" placeholder="Missatge addicional...">
+        </div>
+        <div class="stats-modal-actions">
+            <button class="btn-stats btn-primary-stats" onclick="sendEmail()" style="flex: 1; justify-content: center;">
+                Enviar informe
+            </button>
+            <button class="btn-stats btn-reset-stats" onclick="closeEmailModal()">
+                Cancel·lar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="stats-toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

@@ -492,6 +492,45 @@ function generatePDF() {
         });
 }
 
+function generateStatisticsExcel() {
+    var from = document.getElementById('dateFrom').value;
+    var to = document.getElementById('dateTo').value;
+    if (!from) {
+        showToast('Selecciona un període per generar l\'Excel', 'error');
+        return;
+    }
+    var container = document.getElementById('statsContainer');
+    var cups = container.dataset.cups;
+
+    showToast('Generant Excel...', 'info');
+    fetch('/api/statistics/excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: from, to: to, cups: cups })
+    })
+        .then(function (res) {
+            if (!res.ok) return res.json().then(function (d) {
+                throw new Error((d && d.error) || 'HTTP ' + res.status);
+            });
+            return res.blob();
+        })
+        .then(function (blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'informe-energetic-' + from.replace(/-/g, '') + '-' + String(to || new Date().toISOString().slice(0, 10)).replace(/-/g, '') + '.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Excel generat correctament!', 'success');
+        })
+        .catch(function (err) {
+            console.error('Error generant Excel:', err);
+            showToast(err && err.message ? err.message : 'Error generant l\'Excel', 'error');
+        });
+}
+
 function showEmailModal() {
     var container = document.getElementById('statsContainer');
     var userEmail = (container && container.dataset.email) || '';

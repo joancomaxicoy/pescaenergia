@@ -79,6 +79,16 @@
     box-shadow: 0 5px 15px rgba(102, 187, 106, 0.3);
 }
 
+.btn-info-stats {
+    background: #26a69a;
+    color: white;
+}
+
+.btn-info-stats:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(38, 166, 154, 0.3);
+}
+
 .btn-reset-stats {
     background: #f5f5f5;
     color: #333;

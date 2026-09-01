@@ -1,0 +1,359 @@
+.dashboard-container {
+    max-width: 1400px;
+}
+
+.stats-charts-grid {
+    grid-template-columns: 1.2fr 1fr;
+}
+
+.stats-chart-container canvas {
+    max-height: 320px;
+}
+
+.stats-donut canvas {
+    max-height: 240px;
+}
+
+.stats-donut-center-value {
+    font-size: 18px;
+}
+
+.stats-donut-center-label {
+    font-size: 12px;
+}
+
+.stats-donut-legend-item {
+    font-size: 13px;
+}
+
+@media (max-width: 1024px) {
+    .stats-charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.datadis-filters-panel {
+    position: relative;
+    z-index: 10;
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.datadis-filters-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 20px;
+    align-items: end;
+}
+
+.datadis-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.datadis-filter-group label {
+    font-weight: 600;
+    font-size: 14px;
+    color: #555;
+}
+
+.datadis-date-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.datadis-date-arrow {
+    color: #888;
+}
+
+.datadis-filter-group input[type="date"] {
+    min-width: 150px;
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+
+.datadis-filter-group input[type="date"]:focus {
+    outline: none;
+    border-color: #4fc3f7;
+}
+
+.datadis-quick-filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.datadis-quick-btn {
+    padding: 6px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.datadis-quick-btn:hover {
+    background: #f5f5f5;
+}
+
+.datadis-quick-btn.active {
+    background: #1a1a2e;
+    color: white;
+    border-color: #1a1a2e;
+}
+
+.datadis-filter-actions {
+    flex-direction: row !important;
+    justify-content: end;
+    gap: 10px !important;
+}
+
+@media (max-width: 768px) {
+    .datadis-filters-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .datadis-filter-actions {
+        justify-content: start;
+    }
+}
+
+/* Avís configuració */
+.datadis-warning {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    color: #795548;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 25px;
+    font-size: 14px;
+}
+
+.datadis-warning-icon {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #f9a825;
+    color: white;
+    font-weight: 700;
+    font-style: normal;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+}
+
+/* Càrrega */
+.datadis-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 20px;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    margin-bottom: 25px;
+    color: #555;
+}
+
+.datadis-spinner {
+    width: 34px;
+    height: 34px;
+    border: 4px solid #e0e0e0;
+    border-top-color: #1a1a2e;
+    border-radius: 50%;
+    animation: datadis-spin 0.8s linear infinite;
+}
+
+@keyframes datadis-spin {
+    to { transform: rotate(360deg); }
+}
+
+.datadis-loading-hint {
+    font-size: 12px;
+    color: #999;
+    text-align: center;
+}
+
+/* Alerta error */
+.datadis-alert {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 25px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.datadis-alert-error {
+    background: #fdecea;
+    border: 1px solid #f5c6c2;
+    color: #b71c1c;
+}
+
+/* Resultats */
+.datadis-info {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 15px;
+}
+
+.datadis-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.datadis-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.datadis-card-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 6px;
+}
+
+.datadis-card-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 4px;
+}
+
+.datadis-card-sub {
+    font-size: 12px;
+    color: #999;
+}
+
+.datadis-table-panel {
+    background: white;
+    border-radius: 15px;
+    padding: 20px 25px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+
+.datadis-table-panel h3 {
+    margin: 0 0 15px;
+    color: #1a1a2e;
+    font-size: 16px;
+}
+
+.datadis-table-wrap {
+    overflow-x: auto;
+}
+
+.datadis-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.datadis-table th,
+.datadis-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #f0f0f0;
+    white-space: nowrap;
+}
+
+.datadis-table th {
+    background: #fafafa;
+    color: #666;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.datadis-table tbody tr:hover {
+    background: #f9f9f9;
+}
+
+.datadis-table .datadis-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.datadis-note {
+    font-size: 12px;
+    color: #999;
+    line-height: 1.5;
+    margin: 0;
+}
+
+@media (max-width: 600px) {
+    .datadis-table .datadis-num {
+        white-space: normal;
+    }
+}
+
+.datadis-info-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.btn-info-stats {
+    background: #26a69a;
+    color: white;
+}
+
+.btn-info-stats:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(38, 166, 154, 0.3);
+}
+
+.datadis-collapse-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 14px 18px;
+    background: #f7f7f8;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a2e;
+    cursor: pointer;
+    text-align: left;
+}
+
+.datadis-collapse-toggle:hover {
+    background: #efeff1;
+}
+
+.datadis-collapse-arrow {
+    font-size: 12px;
+    transition: transform 0.2s ease;
+    color: #4a90d9;
+}
+
+.datadis-collapse-toggle[aria-expanded="true"] .datadis-collapse-arrow {
+    transform: rotate(90deg);
+}
+
+.datadis-table-wrap {
+    margin-top: 16px;
+}

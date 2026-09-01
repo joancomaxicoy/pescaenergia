@@ -318,6 +318,25 @@ router.get('/endolls', checkAuthFromCookie, requireAuth, requireCups, (req, res)
 });
 
 /**
+ * Página de Datadis
+ */
+router.get('/datadis', checkAuthFromCookie, requireAuth, requireCups, (req, res) => {
+    res.render('pages/datadis', {
+        title: 'Datadis',
+        layout: 'main',
+        showNavbar: true,
+        showFooter: true,
+        isDatadis: true,
+        user: req.user.userData,
+        datadisConfigured: !!(req.user.userData.dni && req.user.userData.datadis_configured),
+        additionalScripts: ['/js/datadis.js'],
+        helpers: {
+            formatDate: formatDate
+        }
+    });
+});
+
+/**
  * Página de verificación de email requerida
  */
 router.get('/verificar-email', checkAuthFromCookie, (req, res) => {

@@ -309,4 +309,65 @@ async function getDeviceTagMap(cups) {
   });
 }
 
-module.exports = { getStatisticsData };
+async function getBalanceData({ from, to, cups }) {
+  const toDate = to || new Date().toISOString().slice(0, 10);
+  const fromTs = `${from} 00:00:00+00`;
+  const toTs = `${toDate} 23:59:59+00`;
+
+  const deviceTagMap = await getDeviceTagMap(cups);
+
+  // Solar i consum total per interval (15 min) des de balanc_energetic
+  const balancResult = await database.query(
+    `SELECT timestamp, generator_code, allocated_wh, consumption_wh
+     FROM balanc_energetic
+     WHERE cups = $1 AND timestamp >= $2 AND timestamp <= $3`,
+    [cups, fromTs, toTs]
+  );
+
+  // Consum per aparell per interval (15 min) des de consums
+  const consumTsResult = await database.query(
+    `SELECT timestamp, device_id, energia_wh
+     FROM consums
+     WHERE cups = $1 AND timestamp >= $2 AND timestamp <= $3`,
+    [cups, fromTs, toTs]
+  );
+
+  const byTs = {};
+  for (const row of balancResult.rows) {
+    const key = row.timestamp.toISOString();
+    if (!byTs[key]) byTs[key] = { solar: 0, consumption: null, devices: {} };
+    const scale = generatorScales[row.generator_code] || 1;
+    byTs[key].solar += parseFloat(row.allocated_wh) * scale;
+    byTs[key].consumption = parseFloat(row.consumption_wh);
+  }
+
+  for (const row of consumTsResult.rows) {
+    const key = row.timestamp.toISOString();
+    if (!byTs[key]) byTs[key] = { solar: 0, consumption: null, devices: {} };
+    const tag = deviceTagMap[row.device_id] || 'unknown';
+    byTs[key].devices[tag] = (byTs[key].devices[tag] || 0) + parseFloat(row.energia_wh);
+  }
+
+  const intervals = Object.keys(byTs).sort().map((key) => {
+    const d = byTs[key];
+    let consumption = d.consumption;
+    if (consumption === null) {
+      consumption = d.devices.total || Object.values(d.devices).reduce((s, v) => s + v, 0);
+    }
+    const solar = d.solar;
+    return {
+      date: key,
+      consumption: Math.round(consumption * 100) / 100,
+      solar: Math.round(solar * 100) / 100,
+      grid: Math.round(Math.max(0, consumption - solar) * 100) / 100,
+      export: Math.round(Math.max(0, solar - consumption) * 100) / 100,
+      devices: Object.fromEntries(
+        Object.entries(d.devices).map(([t, v]) => [t, Math.round(v * 100) / 100])
+      )
+    };
+  });
+
+  return { period: { from, to: toDate }, cups, intervals };
+}
+
+module.exports = { getStatisticsData, getBalanceData };
